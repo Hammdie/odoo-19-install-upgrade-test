@@ -459,14 +459,6 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 - Automatisierte Cron-Job Konfiguration
 - Backup und Restore Funktionalität
 
-## Roadmap
-
-- [ ] Docker-Container Support
-- [ ] Multi-Instanz Verwaltung
-- [ ] Web-basierte Konfigurationsoberfläche
-- [ ] Erweiterte Monitoring-Dashboards
-- [ ] Cloud-Provider Integration (AWS, GCP, Azure)
-
 ## Autoren & Mitwirkende
 
 - **Dietmar Hamm** - *Hauptentwickler & Projektleitung* - [Hammdie](https://github.com/Hammdie)
