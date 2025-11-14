@@ -397,13 +397,41 @@ git push origin feature/neue-funktion
 - Diskussionen: https://github.com/Hammdie/odoo-upgrade-cron/discussions
 
 ### Enterprise-Support
-Für kommerzielle Unterstützung und angepasste Lösungen kontaktieren Sie:
-- E-Mail: support@example.com
-- Website: https://example.com
+Für kommerzielle Unterstützung und angepasste Lösungen kontaktieren Sie DETELX GmbH:
+- E-Mail: support@detelx.de
+- Website: https://www.detelx.de
+
+**Verfügbare Services:**
+- Professionelle Odoo-Installation & Konfiguration
+- Monitoring & Wartung
+- Custom Odoo-Module Entwicklung
+- Migration & Upgrade-Services
+- Schulungen & Consulting
 
 ## Lizenz
 
+**Copyright © 2025 DETELX GmbH. Alle Rechte vorbehalten.**
+
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
+
+### Haftungsausschluss
+
+⚠️ **VERWENDUNG AUF EIGENE GEFAHR - AS IS**
+
+Diese Software wird "wie besehen" zur Verfügung gestellt, ohne jegliche ausdrückliche oder stillschweigende Gewährleistung. Die Autoren und DETELX GmbH übernehmen keine Haftung für Schäden jeglicher Art, die durch die Verwendung dieser Software entstehen könnten, einschließlich, aber nicht beschränkt auf:
+
+- Datenverlust oder Beschädigung von Systemen
+- Ausfallzeiten oder Betriebsunterbrechungen  
+- Sicherheitsprobleme oder Datenlecks
+- Finanzielle Verluste oder Geschäftsschäden
+
+**Es wird dringend empfohlen:**
+- Vollständige Backups vor der Verwendung zu erstellen
+- Die Scripts in einer Testumgebung zu validieren
+- Eigene Sicherheitsaudits durchzuführen
+- Professionelle IT-Beratung einzuholen
+
+Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollständig.
 
 ## Changelog
 
@@ -439,11 +467,19 @@ Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details
 - [ ] Erweiterte Monitoring-Dashboards
 - [ ] Cloud-Provider Integration (AWS, GCP, Azure)
 
-## Autoren
+## Autoren & Mitwirkende
 
-- **Hammdie** - *Initial work* - [Hammdie](https://github.com/Hammdie)
+- **Dietmar Hamm** - *Hauptentwickler & Projektleitung* - [Hammdie](https://github.com/Hammdie)
+- **DETELX GmbH** - *Projektsponsoring & Enterprise Support*
 
+### Mitwirkende
 Siehe auch die Liste der [Mitwirkenden](https://github.com/Hammdie/odoo-upgrade-cron/contributors), die an diesem Projekt beteiligt waren.
+
+### Unternehmensinformationen
+**DETELX GmbH**  
+IT-Consulting & Enterprise Solutions  
+Website: [www.detelx.de](https://www.detelx.de)  
+E-Mail: info@detelx.de
 
 ---
 
