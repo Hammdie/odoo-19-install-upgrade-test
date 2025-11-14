@@ -1,0 +1,55 @@
+[options]
+# This is the password that allows database operations:
+admin_passwd = change_me_admin_password
+
+# Database settings
+db_host = localhost
+db_port = 5432
+db_user = odoo
+db_password = change_me_db_password
+db_name = False
+
+# Addons path
+addons_path = /opt/odoo/addons,/opt/odoo/custom-addons
+
+# Server settings
+xmlrpc_port = 8069
+xmlrpc_interface = 
+longpolling_port = 8072
+
+# Logging
+logfile = /var/log/odoo/odoo.log
+log_level = info
+log_db = False
+log_handler = :INFO
+log_db_level = warning
+
+# Performance
+workers = 4
+max_cron_threads = 2
+limit_memory_hard = 2684354560
+limit_memory_soft = 2147483648
+limit_request = 8192
+limit_time_cpu = 600
+limit_time_real = 1200
+
+# Security
+list_db = False
+proxy_mode = True
+
+# Session settings
+session_timeout = 3600
+
+# Email settings (optional)
+# email_from = odoo@yourdomain.com
+# smtp_server = localhost
+# smtp_port = 587
+# smtp_user = 
+# smtp_password = 
+# smtp_ssl = False
+
+# Data directory
+data_dir = /opt/odoo/.local/share/Odoo
+
+# Without demo data
+without_demo = all

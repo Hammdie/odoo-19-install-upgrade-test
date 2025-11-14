@@ -1,0 +1,20 @@
+# Odoo Upgrade Cron Jobs
+# These cron jobs handle automatic updates and maintenance
+
+# Daily system maintenance at 2:00 AM
+0 2 * * * /opt/odoo-upgrade-cron/scripts/daily-maintenance.sh >> /var/log/odoo-upgrade/daily.log 2>&1
+
+# Weekly Odoo updates on Sunday at 3:00 AM
+0 3 * * 0 /opt/odoo-upgrade-cron/scripts/weekly-odoo-update.sh >> /var/log/odoo-upgrade/weekly.log 2>&1
+
+# Database backup every day at 1:30 AM
+30 1 * * * /opt/odoo-upgrade-cron/scripts/backup-odoo.sh --auto >> /var/log/odoo-upgrade/backup.log 2>&1
+
+# System monitoring every hour
+0 * * * * /opt/odoo-upgrade-cron/scripts/monitor-system.sh >> /var/log/odoo-upgrade/monitor.log 2>&1
+
+# Clean old log files every month on the 1st at midnight
+0 0 1 * * find /var/log/odoo-upgrade -name "*.log" -mtime +30 -delete
+
+# Clean old backup files every week (keep 4 weeks)
+0 4 * * 0 find /opt/odoo-upgrade-cron/backups -name "*.sql" -mtime +28 -delete
