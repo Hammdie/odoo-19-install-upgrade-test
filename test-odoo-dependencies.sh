@@ -131,7 +131,6 @@ if [[ "$POSTGRES_RUNNING" == "true" ]]; then
         else
             test_warn "No databases found or connection timeout"
         fi
-        fi
         
         # Check if pgvector package is installed (non-blocking)
         echo -e "${CYAN}  Checking pgvector package...${NC}"
