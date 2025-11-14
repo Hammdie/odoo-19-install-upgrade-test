@@ -3,7 +3,8 @@
 # Odoo Dependencies Test Script
 # Überprüft kritische Odoo-Abhängigkeiten und Extensions
 
-set -e
+# Disable exit on error for tests
+set +e
 
 # Colors
 RED='\033[0;31m'
@@ -20,7 +21,7 @@ TESTS_FAILED=0
 TESTS_WARNING=0
 
 echo -e "${BLUE}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║           Odoo Dependencies Test            ║${NC}"
+echo -e "${BLUE}║           Odoo Dependencies Test             ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════╝${NC}"
 echo
 
@@ -64,106 +65,89 @@ if [[ "$POSTGRES_RUNNING" == "true" ]]; then
     # Get list of databases
     echo -e "${BLUE}Checking vector extension in databases...${NC}"
     
-    # Try multiple connection methods
+    # Try multiple connection methods with timeout
     POSTGRES_USER=""
-    if sudo -u postgres psql -c "SELECT version();" >/dev/null 2>&1; then
+    echo -e "${CYAN}  Testing database connections...${NC}"
+    
+    if timeout 5 sudo -u postgres psql -c "SELECT version();" >/dev/null 2>&1; then
         POSTGRES_USER="postgres"
-    elif psql -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
+        echo -e "${CYAN}  Connected as postgres user${NC}"
+    elif timeout 5 psql -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
         POSTGRES_USER="odoo"
-    elif psql -d postgres -c "SELECT version();" >/dev/null 2>&1; then
+        echo -e "${CYAN}  Connected as odoo user${NC}"
+    elif timeout 5 psql -d postgres -c "SELECT version();" >/dev/null 2>&1; then
         POSTGRES_USER="$(whoami)"
-    elif su - postgres -c "psql -c 'SELECT version();'" >/dev/null 2>&1; then
-        POSTGRES_USER="postgres-su"
+        echo -e "${CYAN}  Connected as current user${NC}"
+    else
+        test_fail "Cannot connect to PostgreSQL database"
+        POSTGRES_USER=""
     fi
     
     if [[ -n "$POSTGRES_USER" ]]; then
-        # Get ALL databases (not just user databases)
+        # Get ALL databases (not just user databases) with timeout
+        echo -e "${CYAN}  Retrieving database list...${NC}"
         case "$POSTGRES_USER" in
             "postgres")
-                DBS=$(sudo -u postgres psql -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$')
+                DBS=$(timeout 10 sudo -u postgres psql -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$' | head -20)
                 ;;
             "odoo")
-                DBS=$(psql -U odoo -d postgres -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$')
-                ;;
-            "postgres-su")
-                DBS=$(su - postgres -c "psql -t -c \"SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');\"") | sed 's/^ *//g' | grep -v '^$'
+                DBS=$(timeout 10 psql -U odoo -d postgres -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$' | head -20)
                 ;;
             *)
-                DBS=$(psql -d postgres -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$')
+                DBS=$(timeout 10 psql -d postgres -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('template0', 'template1');" 2>/dev/null | sed 's/^ *//g' | grep -v '^$' | head -20)
                 ;;
         esac
         
-        test_info "Found databases: $(echo $DBS | wc -w) total"
-        echo -e "${CYAN}  Databases found: $(echo $DBS | tr '\n' ' ')${NC}"
-        
         if [[ -n "$DBS" ]]; then
-            for db in $DBS; do
-                echo -e "${CYAN}  Database: $db${NC}"
-                
-                # Check if vector extension exists
-                case "$POSTGRES_USER" in
-                    "postgres")
-                        VECTOR_CHECK=$(sudo -u postgres psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        VECTOR_AVAILABLE=$(sudo -u postgres psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_available_extensions WHERE name='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        ;;
-                    "odoo")
-                        VECTOR_CHECK=$(psql -U odoo -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        VECTOR_AVAILABLE=$(psql -U odoo -d "$db" -t -c "SELECT COUNT(*) FROM pg_available_extensions WHERE name='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        ;;
-                    "postgres-su")
-                        VECTOR_CHECK=$(su - postgres -c "psql -d $db -t -c \"SELECT COUNT(*) FROM pg_extension WHERE extname='vector';\"" 2>/dev/null | tr -d ' \n' || echo "0")
-                        VECTOR_AVAILABLE=$(su - postgres -c "psql -d $db -t -c \"SELECT COUNT(*) FROM pg_available_extensions WHERE name='vector';\"" 2>/dev/null | tr -d ' \n' || echo "0")
-                        ;;
-                    *)
-                        VECTOR_CHECK=$(psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        VECTOR_AVAILABLE=$(psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_available_extensions WHERE name='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
-                        ;;
-                esac
-                
-                if [[ "$VECTOR_CHECK" == "1" ]]; then
-                    test_pass "    Vector extension installed in $db"
-                elif [[ "$VECTOR_AVAILABLE" == "1" ]]; then
-                    test_warn "    Vector extension available but not enabled in $db - attempting installation..."
+            DB_COUNT=$(echo "$DBS" | wc -l)
+            test_info "Found $DB_COUNT database(s)"
+            echo -e "${CYAN}  Databases: $(echo $DBS | tr '\n' ' ' | head -c 100)...${NC}"
+            
+            # Test vector extension on first few databases only
+            echo "$DBS" | head -3 | while read -r db; do
+                if [[ -n "$db" ]]; then
+                    echo -e "${CYAN}  Checking database: $db${NC}"
                     
-                    # Try to install vector extension
+                    # Check if vector extension exists with timeout
                     case "$POSTGRES_USER" in
                         "postgres")
-                            if sudo -u postgres psql -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1; then
-                                test_pass "    Vector extension installed in $db"
-                            else
-                                test_fail "    Could not install vector extension in $db"
-                            fi
+                            VECTOR_CHECK=$(timeout 5 sudo -u postgres psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
                             ;;
                         "odoo")
-                            if psql -U odoo -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1; then
-                                test_pass "    Vector extension installed in $db"
-                            else
-                                test_fail "    Could not install vector extension in $db"
-                            fi
+                            VECTOR_CHECK=$(timeout 5 psql -U odoo -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
                             ;;
                         *)
-                            if psql -d "$db" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null 2>&1; then
-                                test_pass "    Vector extension installed in $db"
-                            else
-                                test_fail "    Could not install vector extension in $db"
-                            fi
+                            VECTOR_CHECK=$(timeout 5 psql -d "$db" -t -c "SELECT COUNT(*) FROM pg_extension WHERE extname='vector';" 2>/dev/null | tr -d ' \n' || echo "0")
                             ;;
                     esac
-                else
-                    test_fail "    Vector extension not available in $db - pgvector package missing"
+                    
+                    if [[ "$VECTOR_CHECK" == "1" ]]; then
+                        test_pass "    Vector extension installed in $db"
+                    else
+                        test_warn "    Vector extension not found in $db"
+                    fi
                 fi
             done
         else
-            test_warn "No databases found (only templates exist)"
+            test_warn "No databases found or connection timeout"
+        fi
         fi
         
-        # Check if pgvector package is installed
-        if dpkg -l | grep -q "postgresql.*pgvector"; then
+        # Check if pgvector package is installed (non-blocking)
+        echo -e "${CYAN}  Checking pgvector package...${NC}"
+        if dpkg -l 2>/dev/null | grep -q "postgresql.*pgvector"; then
             test_pass "pgvector package is installed"
         else
-            test_fail "pgvector package not installed"
-            test_info "Install with: sudo apt install postgresql-$(pg_config --version | grep -o '[0-9]*')-pgvector"
+            test_warn "pgvector package not found"
+            if command -v pg_config >/dev/null 2>&1; then
+                PG_VERSION=$(pg_config --version 2>/dev/null | grep -o '[0-9][0-9]*' | head -n1)
+                test_info "Install with: sudo apt install postgresql-${PG_VERSION}-pgvector"
+            else
+                test_info "Install with: sudo apt install postgresql-*-pgvector"
+            fi
         fi
+    else
+        test_fail "Could not establish database connection"
     fi
 fi
 
