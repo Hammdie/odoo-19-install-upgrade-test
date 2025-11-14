@@ -207,9 +207,16 @@ configure_firewall() {
     # Allow SSH
     ufw allow ssh 2>&1 | tee -a "$LOG_FILE"
     
+    # Allow HTTP and HTTPS
+    ufw allow 80/tcp comment 'HTTP' 2>&1 | tee -a "$LOG_FILE"
+    ufw allow 443/tcp comment 'HTTPS' 2>&1 | tee -a "$LOG_FILE"
+    
     # Allow Odoo ports
     ufw allow 8069/tcp comment 'Odoo HTTP' 2>&1 | tee -a "$LOG_FILE"
     ufw allow 8072/tcp comment 'Odoo Longpolling' 2>&1 | tee -a "$LOG_FILE"
+    
+    # Allow PostgreSQL (nur lokal)
+    ufw allow from 127.0.0.1 to any port 5432 comment 'PostgreSQL local' 2>&1 | tee -a "$LOG_FILE"
     
     # Enable firewall
     ufw --force enable 2>&1 | tee -a "$LOG_FILE"
