@@ -69,40 +69,40 @@ echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
 echo -e "\n${BLUE}Current authentication configuration:${NC}"
 grep -v "^#" "$PG_HBA_FILE" | grep -v "^$" | head -10
 
-# Create new pg_hba.conf with localhost trust authentication
-echo -e "\n${BLUE}Updating pg_hba.conf for localhost trust authentication...${NC}"
+# Create new pg_hba.conf with peer authentication and limited localhost trust
+echo -e "\n${BLUE}Updating pg_hba.conf for production-safe authentication...${NC}"
 
 cat > "$PG_HBA_FILE" << 'EOF'
 # PostgreSQL Client Authentication Configuration File
-# Fixed for localhost trust authentication
+# Production-optimized configuration
 
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
 
-# "local" is for Unix domain socket connections only
+# "local" is for Unix domain socket connections only (peer authentication)
 local   all             postgres                                peer
 local   all             odoo                                    peer
 local   all             all                                     peer
 
-# IPv4 local connections:
-host    all             postgres        127.0.0.1/32            trust
-host    all             odoo            127.0.0.1/32            trust  
-host    all             all             127.0.0.1/32            trust
+# IPv4 local connections - more restrictive
+host    all             postgres        127.0.0.1/32            md5
+host    all             odoo            127.0.0.1/32            md5  
+host    all             all             127.0.0.1/32            md5
 
-# IPv6 local connections:
-host    all             postgres        ::1/128                 trust
-host    all             odoo            ::1/128                 trust
-host    all             all             ::1/128                 trust
+# IPv6 local connections
+host    all             postgres        ::1/128                 md5
+host    all             odoo            ::1/128                 md5
+host    all             all             ::1/128                 md5
 
-# Remote connections (more restrictive)
+# Remote connections (password required)
 host    all             all             0.0.0.0/0               md5
 
 # Replication connections
 local   replication     all                                     peer
-host    replication     all             127.0.0.1/32            trust
-host    replication     all             ::1/128                 trust
+host    replication     all             127.0.0.1/32            md5
+host    replication     all             ::1/128                 md5
 EOF
 
-echo -e "${GREEN}✓ Updated pg_hba.conf for localhost trust authentication${NC}"
+echo -e "${GREEN}✓ Updated pg_hba.conf for production-safe peer authentication${NC}"
 
 # Show new configuration
 echo -e "\n${BLUE}New authentication configuration:${NC}"
