@@ -118,6 +118,9 @@ install_crontab() {
     # Replace placeholder paths with actual project path
     sed "s|/opt/odoo-upgrade-cron|$PROJECT_ROOT|g" "$CRON_CONFIG" > "$temp_crontab"
     
+    # Ensure the crontab file ends with a newline
+    echo "" >> "$temp_crontab"
+    
     # Install the crontab
     crontab "$temp_crontab" 2>&1 | tee -a "$LOG_FILE"
     
@@ -152,6 +155,7 @@ create_default_crontab() {
 
 # Clean old backup files every week (keep 4 weeks)
 0 4 * * 0 find $PROJECT_ROOT/backups -name "*.sql" -mtime +28 -delete
+
 EOF
     
     log "INFO" "Default crontab configuration created"
