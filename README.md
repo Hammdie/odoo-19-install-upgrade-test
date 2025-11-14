@@ -14,15 +14,30 @@ Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die auto
 - 📝 Logging und Monitoring der Update-Prozesse
 - 🛡️ Backup-Erstellung vor Updates
 - ⚡ Performance-Optimierung für Odoo 19.0
+- **🔐 PostgreSQL Peer-Authentifizierung für Produktionsumgebungen**
+- **🔧 Automatische Reparatur-Scripts für beschädigte Installationen**
+- **🧪 Umfassende Dependency-Tests (Vector-Extension, wkhtmltopdf, Python-Pakete)**
+- **🔥 Automatische UFW-Firewall Konfiguration**
+- **👤 Automatische PostgreSQL-Benutzerberechtigungen**
+- **⚙️ Erkennung und Schonung vorhandener Odoo-Installationen**
 
 ## Voraussetzungen
 
 ### System-Anforderungen
 - Ubuntu 20.04 LTS oder höher
-- Python 3.8+
-- PostgreSQL 12+
+- Python 3.8+ (mit phonenumbers, lxml, requests)
+- PostgreSQL 12+ mit Vector-Extension
+- Node.js 16+ mit rtlcss für RTL-Sprachen
+- wkhtmltopdf 0.12.6.1 mit Qt-Patch
 - Mindestens 4GB RAM
 - 20GB freier Speicherplatz
+
+### Geprüfte Dependencies (automatisch getestet)
+- **PostgreSQL Vector Extension:** Für erweiterte Suchfunktionen
+- **wkhtmltopdf Qt-Patch:** Für PDF-Generierung mit korrekter Darstellung
+- **Python phonenumbers:** Für internationale Telefonnummern-Validierung
+- **Node.js rtlcss:** Für Right-to-Left Sprachen (Arabisch, Hebräisch)
+- **UFW Firewall:** Für sichere HTTP/HTTPS-Verbindungen
 
 ### Berechtigungen
 - Root oder sudo-Zugriff auf dem Ziel-Host
@@ -113,16 +128,22 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 
 ### Verfügbare Scripts
 
-| Script | Beschreibung |
-|--------|-------------|
-| `install.sh` | Hauptinstallationsscript |
-| `scripts/upgrade-system.sh` | System-Pakete aktualisieren |
-| `scripts/install-odoo19.sh` | Odoo 19.0 Installation |
-| `scripts/setup-cron.sh` | Cron-Jobs einrichten |
-| `scripts/backup-odoo.sh` | Odoo-Datenbank Backup |
-| `scripts/restore-odoo.sh` | Odoo-Datenbank Wiederherstellung |
-| `scripts/daily-maintenance.sh` | Tägliche Wartungsaufgaben |
-| `scripts/weekly-odoo-update.sh` | Wöchentliche Odoo-Updates |
+| Script | Beschreibung | Version |
+|--------|-------------|---------|
+| `install.sh` | Hauptinstallationsscript mit Erkennung vorhandener Installationen | 1.1.0 |
+| `scripts/upgrade-system.sh` | System-Pakete aktualisieren | 1.0.0 |
+| `scripts/install-odoo19.sh` | Odoo 19.0 Installation | 1.0.0 |
+| `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.0.0 |
+| `scripts/backup-odoo.sh` | Odoo-Datenbank Backup | 1.0.0 |
+| `scripts/restore-odoo.sh` | Odoo-Datenbank Wiederherstellung | 1.0.0 |
+| `scripts/daily-maintenance.sh` | Tägliche Wartungsaufgaben | 1.0.0 |
+| `scripts/weekly-odoo-update.sh` | Wöchentliche Odoo-Updates | 1.0.0 |
+| **`repair-database.sh`** | **Repariert PostgreSQL-Authentifizierungsprobleme** | **1.1.0** |
+| **`fix-firewall.sh`** | **Konfiguriert UFW-Firewall für Odoo** | **1.1.0** |
+| **`test-odoo-dependencies.sh`** | **Testet alle Odoo-Abhängigkeiten umfassend** | **1.1.0** |
+| **`fix-postgres-auth.sh`** | **Konfiguriert PostgreSQL für Peer-Authentifizierung** | **1.1.0** |
+| **`test-odoo-user-permissions.sh`** | **Testet odoo-Benutzer Datenbankberechtigungen** | **1.1.0** |
+| **`scripts/set-postgres-password.sh`** | **Setzt PostgreSQL-Passwort für odoo-Benutzer** | **1.1.0** |
 
 ## Ordnerstruktur
 
@@ -229,15 +250,86 @@ sudo systemctl restart postgresql
 
 2. **Datenbankverbindung fehlgeschlagen:**
    ```bash
+   # Teste PostgreSQL-Verbindung
    sudo -u postgres psql -l
    sudo systemctl status postgresql
+   
+   # Teste odoo-Benutzer Berechtigungen
+   ./test-odoo-user-permissions.sh
    ```
 
-3. **Unzureichende Berechtigungen:**
+3. **PostgreSQL Authentifizierungsfehler:**
+   ```bash
+   # Repariere Datenbank-Authentifizierung
+   sudo ./repair-database.sh
+   
+   # Oder konfiguriere Peer-Authentifizierung neu
+   sudo ./fix-postgres-auth.sh
+   ```
+
+4. **Firewall blockiert Odoo-Zugriff:**
+   ```bash
+   # Konfiguriere Firewall automatisch
+   sudo ./fix-firewall.sh
+   
+   # Oder manuell
+   sudo ufw allow 8069/tcp
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   ```
+
+5. **Fehlende Dependencies:**
+   ```bash
+   # Teste alle Abhängigkeiten
+   ./test-odoo-dependencies.sh
+   
+   # Installiere fehlende Pakete basierend auf Test-Output
+   ```
+
+6. **Unzureichende Berechtigungen:**
    ```bash
    sudo chown -R odoo:odoo /opt/odoo
    sudo chmod +x scripts/*.sh
    ```
+
+### Reparatur-Scripts für Produktionsumgebungen
+
+```bash
+# Komplette Systemreparatur nach fehlgeschlagener Installation
+sudo ./repair-database.sh        # Repariert Datenbankprobleme
+sudo ./fix-firewall.sh          # Repariert Firewall-Konfiguration
+sudo ./fix-postgres-auth.sh     # Konfiguriert PostgreSQL-Authentifizierung
+
+# Teste nach Reparatur
+./test-odoo-dependencies.sh     # Teste alle Dependencies
+./test-odoo-user-permissions.sh # Teste Datenbankberechtigungen
+```
+
+### PostgreSQL-Authentifizierung Konfiguration
+
+**Für Produktionsumgebungen (empfohlen):**
+```bash
+# Verwende Peer-Authentifizierung (kein Passwort nötig)
+sudo ./fix-postgres-auth.sh
+
+# In /etc/odoo/odoo.conf:
+# db_host = False
+# db_port = False  
+# db_user = odoo
+# db_password =
+```
+
+**Für Netzwerk-Verbindungen:**
+```bash
+# Setze Passwort für odoo-Benutzer
+sudo ./scripts/set-postgres-password.sh
+
+# In /etc/odoo/odoo.conf:
+# db_host = localhost
+# db_port = 5432
+# db_user = odoo
+# db_password = your_password
+```
 
 ### Debug-Modus
 
@@ -314,6 +406,24 @@ Für kommerzielle Unterstützung und angepasste Lösungen kontaktieren Sie:
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
 
 ## Changelog
+
+### Version 1.1.0 (2025-11-14)
+- **Verbesserte PostgreSQL-Authentifizierung:** Peer-Authentication für Produktionsumgebungen
+- **Database Repair Scripts:** Reparatur-Scripts für beschädigte Installationen
+- **Erweiterte Dependency-Tests:** Umfassende Tests für alle Odoo-Abhängigkeiten
+- **Firewall-Konfiguration:** Automatische UFW-Konfiguration mit HTTP/HTTPS-Ports
+- **Benutzer-Berechtigungen:** Automatische Konfiguration der PostgreSQL-Datenbankberechtigungen
+- **Produktions-optimierte Scripts:** Angepasst für echte Serverumgebungen ohne localhost-Trust
+
+### Neue Scripts in Version 1.1.0:
+| Script | Beschreibung |
+|--------|-------------|
+| `repair-database.sh` | Repariert PostgreSQL-Authentifizierungsprobleme |
+| `fix-firewall.sh` | Konfiguriert UFW-Firewall für Odoo |
+| `test-odoo-dependencies.sh` | Testet alle Odoo-Abhängigkeiten |
+| `fix-postgres-auth.sh` | Konfiguriert PostgreSQL für Peer-Authentifizierung |
+| `test-odoo-user-permissions.sh` | Testet odoo-Benutzer Datenbankberechtigungen |
+| `scripts/set-postgres-password.sh` | Setzt PostgreSQL-Passwort für odoo-Benutzer |
 
 ### Version 1.0.0 (2025-11-14)
 - Initiale Version
