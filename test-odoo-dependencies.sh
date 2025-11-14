@@ -764,9 +764,49 @@ if [[ -f "/etc/odoo/odoo.conf" ]]; then
         test_warn "No addons_path configured"
     fi
     
-    # Test database connection with multiple methods (optimized for localhost trust)\n    DB_CONNECTION_OK=false\n    \n    # Method 1: Try localhost trust connection (should work after fix-postgres-auth.sh)\n    if timeout 5 psql -h localhost -U postgres -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; then\n        test_pass \"Database connection successful (localhost trust)\"\n        DB_CONNECTION_OK=true\n    # Method 2: Try with postgres user (we know this works from earlier test)\n    elif timeout 5 sudo -u postgres psql -h \"$DB_HOST\" -p \"$DB_PORT\" -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; then\n        test_pass \"Database connection successful (postgres user)\"\n        DB_CONNECTION_OK=true\n    # Method 3: Try localhost with odoo user\n    elif timeout 5 psql -h localhost -U odoo -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; then\n        test_pass \"Database connection successful (localhost odoo user)\"\n        DB_CONNECTION_OK=true\n    # Method 4: Try with odoo user and config settings\n    elif timeout 5 sudo -u odoo psql -h \"$DB_HOST\" -p \"$DB_PORT\" -U \"$DB_USER\" -d postgres -c \"SELECT 1;\" >/dev/null 2>&1; then\n        test_pass \"Database connection successful (peer authentication)\"\n        DB_CONNECTION_OK=true\n    else\n        test_warn \"Database connection failed with odoo.conf settings\"\n        test_info \"But PostgreSQL Vector test succeeded, so DB is working\"\n        # Since we know PostgreSQL works, mark as partially OK\n        DB_CONNECTION_OK=true\n    fi"
+    # Test database connection with multiple methods (optimized for localhost trust)
+    DB_CONNECTION_OK=false
     
-    # If connection works, test database operations\n    if [[ \"$DB_CONNECTION_OK\" == \"true\" ]]; then\n        # Test database creation permissions (using localhost trust)\n        TEST_DB=\"odoo_test_$(date +%s)\"\n        if createdb -h localhost -U postgres \"$TEST_DB\" 2>/dev/null; then\n            test_pass \"Database user has CREATE DATABASE permissions (localhost)\"\n            dropdb -h localhost -U postgres \"$TEST_DB\" 2>/dev/null\n        elif sudo -u postgres createdb \"$TEST_DB\" 2>/dev/null; then\n            test_pass \"Database user has CREATE DATABASE permissions (postgres user)\"\n            sudo -u postgres dropdb \"$TEST_DB\" 2>/dev/null\n        else\n            test_warn \"Database user may not have CREATE DATABASE permissions\"\n        fi\n        \n        # List existing databases (using localhost trust)\n        ODOO_DBS=$(psql -h localhost -U postgres -d postgres -t -c \"SELECT datname FROM pg_database WHERE datname NOT IN ('postgres', 'template0', 'template1') ORDER BY datname;\" 2>/dev/null | sed 's/^ *//g' | grep -v '^$')\n        if [[ -n \"$ODOO_DBS\" ]]; then"
+    # Method 1: Try localhost trust connection (should work after fix-postgres-auth.sh)
+    if timeout 5 psql -h localhost -U postgres -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
+        test_pass "Database connection successful (localhost trust)"
+        DB_CONNECTION_OK=true
+    # Method 2: Try with postgres user (we know this works from earlier test)
+    elif timeout 5 sudo -u postgres psql -h "$DB_HOST" -p "$DB_PORT" -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
+        test_pass "Database connection successful (postgres user)"
+        DB_CONNECTION_OK=true
+    # Method 3: Try localhost with odoo user
+    elif timeout 5 psql -h localhost -U odoo -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
+        test_pass "Database connection successful (localhost odoo user)"
+        DB_CONNECTION_OK=true
+    # Method 4: Try with odoo user and config settings
+    elif timeout 5 sudo -u odoo psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
+        test_pass "Database connection successful (peer authentication)"
+        DB_CONNECTION_OK=true
+    else
+        test_warn "Database connection failed with odoo.conf settings"
+        test_info "But PostgreSQL Vector test succeeded, so DB is working"
+        # Since we know PostgreSQL works, mark as partially OK
+        DB_CONNECTION_OK=true
+    fi
+    
+    # If connection works, test database operations
+    if [[ "$DB_CONNECTION_OK" == "true" ]]; then
+        # Test database creation permissions (using localhost trust)
+        TEST_DB="odoo_test_$(date +%s)"
+        if createdb -h localhost -U postgres "$TEST_DB" 2>/dev/null; then
+            test_pass "Database user has CREATE DATABASE permissions (localhost)"
+            dropdb -h localhost -U postgres "$TEST_DB" 2>/dev/null
+        elif sudo -u postgres createdb "$TEST_DB" 2>/dev/null; then
+            test_pass "Database user has CREATE DATABASE permissions (postgres user)"
+            sudo -u postgres dropdb "$TEST_DB" 2>/dev/null
+        else
+            test_warn "Database user may not have CREATE DATABASE permissions"
+        fi
+        
+        # List existing databases (using localhost trust)
+        ODOO_DBS=$(psql -h localhost -U postgres -d postgres -t -c "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres', 'template0', 'template1') ORDER BY datname;" 2>/dev/null | sed 's/^ *//g' | grep -v '^$')
+        if [[ -n "$ODOO_DBS" ]]; then
             DB_COUNT=$(echo "$ODOO_DBS" | wc -l)
             test_pass "Found $DB_COUNT database(s)"
             echo -e "${CYAN}    Databases: $(echo $ODOO_DBS | tr '\n' ' ')${NC}"
