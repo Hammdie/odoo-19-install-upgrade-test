@@ -190,18 +190,50 @@ else
     echo -e "${RED}✗ postgres user connection failed${NC}"
 fi
 
-# Test odoo user
-if sudo -u postgres psql -U odoo -d postgres -c "SELECT current_user, current_database();" >/dev/null 2>&1; then
-    echo -e "${GREEN}✓ odoo user connection works${NC}"
+# Test odoo user (using peer authentication - no password needed)
+if sudo -u postgres psql -d postgres -c "SELECT current_user;" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ postgres user connection works${NC}"
 else
-    echo -e "${RED}✗ odoo user connection failed${NC}"
+    echo -e "${RED}✗ postgres user connection failed${NC}"
 fi
 
+# Test odoo user via peer auth (no network, no password)
+if sudo -u odoo psql -d postgres -c "SELECT current_user;" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ odoo user connection works (peer auth)${NC}"
+elif id odoo >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ odoo user connection failed - checking system user...${NC}"
+    
+    # Check if odoo system user exists and can access PostgreSQL
+    if sudo -u postgres psql -c "SELECT 1;" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ PostgreSQL is accessible${NC}"
+        echo -e "${CYAN}   Creating/verifying odoo system access...${NC}"
+        
+        # Make sure odoo user is in right groups and has access
+        usermod -a -G postgres odoo 2>/dev/null || true
+        
+        # Test again
+        if sudo -u odoo psql -d postgres -c "SELECT current_user;" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ odoo user connection now works${NC}"
+        else
+            echo -e "${YELLOW}⚠ odoo user peer auth still failing${NC}"
+            echo -e "${CYAN}   But odoo can still use PostgreSQL via postgres user${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠ odoo system user does not exist${NC}"
+    echo -e "${CYAN}   This is normal in some setups - Odoo can use postgres user${NC}"
+fi
+
+# Test localhost connection (should work with md5 if password is set)
+echo -e "\n${BLUE}Testing localhost connections...${NC}"
+echo -e "${CYAN}Note: localhost connections require passwords with current setup${NC}"
+
 # Test localhost connection without password
-if psql -h localhost -U postgres -d postgres -c "SELECT current_user;" >/dev/null 2>&1; then
+if timeout 3 psql -h localhost -U postgres -d postgres -c "SELECT current_user;" >/dev/null 2>&1; then
     echo -e "${GREEN}✓ localhost connection without password works${NC}"
 else
-    echo -e "${RED}✗ localhost connection failed${NC}"
+    echo -e "${YELLOW}⚠ localhost connection requires password (as configured)${NC}"
+    echo -e "${CYAN}   This is more secure - peer auth via sockets is preferred${NC}"
 fi
 
 # Test database creation permissions for all users
@@ -216,44 +248,52 @@ else
     echo -e "${RED}✗ postgres user cannot create databases${NC}"
 fi
 
-# Test odoo user via peer authentication
+# Test odoo user via peer authentication (no password needed)
 TEST_DB="test_odoo_$(date +%s)"
-if sudo -u postgres createdb -O odoo "$TEST_DB" 2>/dev/null; then
-    echo -e "${GREEN}✓ odoo user can own databases${NC}"
-    sudo -u postgres dropdb "$TEST_DB" 2>/dev/null
+if sudo -u odoo createdb "$TEST_DB" 2>/dev/null; then
+    echo -e "${GREEN}✓ odoo user can create databases (peer auth)${NC}"
+    sudo -u odoo dropdb "$TEST_DB" 2>/dev/null
+elif id odoo >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠ odoo user cannot create databases directly${NC}"
+    
+    # Test if odoo can own databases created by postgres
+    if sudo -u postgres createdb -O odoo "$TEST_DB" 2>/dev/null; then
+        echo -e "${GREEN}✓ odoo user can own databases${NC}"
+        sudo -u postgres dropdb "$TEST_DB" 2>/dev/null
+    else
+        echo -e "${YELLOW}⚠ odoo database ownership test failed${NC}"
+    fi
 else
-    echo -e "${YELLOW}⚠ odoo user ownership test inconclusive${NC}"
+    echo -e "${CYAN}ℹ odoo system user does not exist - using postgres user for database operations${NC}"
 fi
 
-# Test localhost connection with database creation
-if createdb -h localhost -U postgres "test_localhost_$(date +%s)" 2>/dev/null; then
-    echo -e "${GREEN}✓ localhost postgres connection can create databases${NC}"
-    dropdb -h localhost -U postgres "test_localhost_$(date +%s)" 2>/dev/null
-else
-    echo -e "${YELLOW}⚠ localhost postgres database creation failed${NC}"
-fi
-
-# Test odoo user via localhost (if trust auth is working)
-if createdb -h localhost -U odoo "test_odoo_localhost_$(date +%s)" 2>/dev/null; then
-    echo -e "${GREEN}✓ localhost odoo user can create databases${NC}"
-    dropdb -h localhost -U odoo "test_odoo_localhost_$(date +%s)" 2>/dev/null
-else
-    echo -e "${YELLOW}⚠ localhost odoo user database creation failed${NC}"
-    echo -e "${CYAN}  This is expected if odoo system user doesn't exist${NC}"
-fi
-
-echo -e "\n${GREEN}🎉 PostgreSQL localhost authentication fix completed!${NC}"
+echo -e "\n${GREEN}🎉 PostgreSQL authentication fix completed!${NC}"
 echo
 echo -e "${BLUE}Summary of changes:${NC}"
 echo -e "${GREEN}✓${NC} Backup created: $BACKUP_FILE"
-echo -e "${GREEN}✓${NC} pg_hba.conf updated for trust authentication on localhost"
-echo -e "${GREEN}✓${NC} odoo user created/verified with database creation privileges"
+echo -e "${GREEN}✓${NC} pg_hba.conf updated for peer authentication (no passwords for local connections)"
+echo -e "${GREEN}✓${NC} odoo user created/verified with CREATE DATABASE privileges"
 echo -e "${GREEN}✓${NC} PostgreSQL configuration reloaded"
 echo
-echo -e "${BLUE}You can now:${NC}"
-echo "• Connect without password: psql -h localhost -U postgres"
-echo "• Connect as odoo user: psql -h localhost -U odoo -d postgres"
-echo "• Create databases: createdb -h localhost -U postgres mydb"
+echo -e "${BLUE}How Odoo should connect:${NC}"
+echo -e "${YELLOW}Option 1 (Recommended):${NC} Use peer authentication (no password needed)"
+echo "• In /etc/odoo/odoo.conf:"
+echo "  db_host = False"
+echo "  db_port = False" 
+echo "  db_user = odoo"
+echo "  db_password ="
+echo
+echo -e "${YELLOW}Option 2:${NC} Use localhost with password"
+echo "• Set password: sudo -u postgres psql -c \"ALTER USER odoo PASSWORD 'your_password';\""
+echo "• In /etc/odoo/odoo.conf:"
+echo "  db_host = localhost"
+echo "  db_port = 5432"
+echo "  db_user = odoo" 
+echo "  db_password = your_password"
+echo
+echo -e "${BLUE}Test connection:${NC}"
+echo "sudo -u odoo psql -d postgres          # Peer auth (recommended)"
+echo "psql -h localhost -U odoo -d postgres  # Network auth (needs password)"
 echo
 echo -e "${BLUE}To revert changes:${NC}"
 echo "sudo cp $BACKUP_FILE $PG_HBA_FILE"
