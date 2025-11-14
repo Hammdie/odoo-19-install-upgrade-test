@@ -196,7 +196,60 @@ EOF
 setup_database() {
     log "INFO" "Setting up PostgreSQL database for Odoo..."
     
-    # Set password for odoo database user
+    # Check if this is an upgrade mode (existing installation)
+    if [[ "$ODOO_UPGRADE_MODE" == "true" ]] && [[ -n "$EXISTING_CONFIG_PATH" ]] && [[ -f "$EXISTING_CONFIG_PATH" ]]; then
+        log "INFO" "Upgrade mode detected - preserving existing database configuration"
+        
+        # Extract existing database password from config
+        local existing_password=$(grep -E "^[[:space:]]*db_password[[:space:]]*=" "$EXISTING_CONFIG_PATH" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | tr -d "'")
+        
+        if [[ -n "$existing_password" ]] && [[ "$existing_password" != "False" ]] && [[ "$existing_password" != "false" ]]; then
+            log "INFO" "Using existing database password from configuration"
+            
+            # Test existing password
+            if PGPASSWORD="$existing_password" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -c "\l" postgres &>/dev/null; then
+                log "SUCCESS" "Existing database password is valid"
+                # Update new config with existing password
+                sed -i "s/db_password = .*/db_password = $existing_password/" "$ODOO_CONFIG"
+                return 0
+            else
+                log "WARN" "Existing database password doesn't work"
+            fi
+        else
+            log "INFO" "No existing database password found in configuration"
+        fi
+    fi
+    
+    # Check if odoo user exists and try without password first (peer authentication)
+    if sudo -u postgres psql -c "\du" | grep -q "$ODOO_USER"; then
+        log "INFO" "Database user '$ODOO_USER' already exists"
+        
+        # Test if current configuration works
+        if [[ -f "$ODOO_CONFIG" ]]; then
+            local current_password=$(grep -E "^[[:space:]]*db_password[[:space:]]*=" "$ODOO_CONFIG" | cut -d'=' -f2 | tr -d ' ' | tr -d '"' | tr -d "'")
+            
+            if [[ -n "$current_password" ]] && [[ "$current_password" != "False" ]] && [[ "$current_password" != "false" ]]; then
+                if PGPASSWORD="$current_password" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -c "\l" postgres &>/dev/null; then
+                    log "SUCCESS" "Current database configuration is working"
+                    return 0
+                fi
+            fi
+        fi
+        
+        # Try to connect without password (peer/trust authentication)
+        if sudo -u "$ODOO_USER" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -c "\l" postgres &>/dev/null; then
+            log "SUCCESS" "Database authentication working without password"
+            # Set empty password in config for peer authentication
+            sed -i "s/db_password = .*/db_password = False/" "$ODOO_CONFIG"
+            return 0
+        fi
+    else
+        log "INFO" "Creating new database user '$ODOO_USER'"
+        sudo -u postgres createuser -s "$ODOO_USER" 2>/dev/null || log "WARN" "User '$ODOO_USER' may already exist"
+    fi
+    
+    # Only set new password if nothing else works
+    log "WARN" "Setting new database password as fallback"
     local db_password=$(openssl rand -base64 32)
     sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD '$db_password';" 2>&1 | tee -a "$LOG_FILE"
     
