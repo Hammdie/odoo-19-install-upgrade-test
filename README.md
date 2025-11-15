@@ -1,4 +1,4 @@
-# Odoo Install/Install-Auto-Upgrade/Test
+# Odoo Install/Auto-Upgrade/Test
 
 Ein umfassendes Script-Repository für die automatisierte Aktualisierung und Wartung von Odoo 19.0 Installationen auf VM-Hosts.
 
