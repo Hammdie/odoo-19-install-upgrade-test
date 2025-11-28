@@ -468,10 +468,10 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 Siehe auch die Liste der [Mitwirkenden](https://github.com/Hammdie/odoo-upgrade-cron/contributors), die an diesem Projekt beteiligt waren.
 
 ### Unternehmensinformationen
-**DETELX GmbH**  
-IT-Consulting & Enterprise Solutions  
-Website: [www.detelx.de](https://www.detelx.de)  
-E-Mail: info@detelx.de
+**DETALX GmbH**  
+IT-Consulting & Solutions  
+Website: [www.detalx.de](https://www.detalx.de)  
+E-Mail: info@detalx.de
 
 ---
 
