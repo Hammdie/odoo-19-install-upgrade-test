@@ -123,12 +123,15 @@ show_fixes_menu() {
         echo -e "  ${GREEN}9)${NC} Check Odoo Version & Status"
         echo -e "     Display installed Odoo version and Enterprise status"
         echo
+        echo -e "  ${GREEN}10)${NC} Fix Enterprise Installation"
+        echo -e "      Repair failed or incomplete Enterprise installation"
+        echo
         echo -e "  ${RED}0)${NC} Back to Main Menu"
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-9]: "${NC})" fix_choice
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-10]: "${NC})" fix_choice
         
         case $fix_choice in
             1)
@@ -248,13 +251,26 @@ show_fixes_menu() {
                 echo
                 read -p "Press Enter to continue..."
                 ;;
+            10)
+                echo
+                echo -e "${YELLOW}Fix Enterprise Installation${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/fix-enterprise-installation.sh" ]]; then
+                    bash "$PROJECT_ROOT/fix-enterprise-installation.sh"
+                else
+                    echo -e "${RED}Error: fix-enterprise-installation.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
             0)
                 show_banner
                 return 0
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-9.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-10.${NC}"
                 sleep 2
                 ;;
         esac
@@ -1531,29 +1547,113 @@ install_enterprise() {
     
     if sudo -u odoo git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "Enterprise repository cloned successfully"
+        
+        # Set permissions
+        chown -R odoo:odoo "$ENTERPRISE_PATH"
+        chmod -R 755 "$ENTERPRISE_PATH"
+        log "SUCCESS" "Enterprise directory permissions set"
+        
+        # Verify clone was successful by checking for .git directory
+        if [[ ! -d "$ENTERPRISE_PATH/.git" ]]; then
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════════════════╗"
+            echo "║                                                                            ║"
+            echo "║  ❌ ENTERPRISE VALIDATION FAILED - INCOMPLETE CLONE ❌                     ║"
+            echo "║                                                                            ║"
+            echo "╚════════════════════════════════════════════════════════════════════════════╝"
+            echo ""
+            log "ERROR" "Enterprise clone verification failed"
+            log "ERROR" "Missing .git directory in: $ENTERPRISE_PATH"
+            log "ERROR" "The repository appears to be incomplete or corrupted"
+            echo ""
+            log "ERROR" "TROUBLESHOOTING:"
+            log "ERROR" "  • Check disk space: df -h"
+            log "ERROR" "  • Check permissions: ls -la $(dirname $ENTERPRISE_PATH)"
+            log "ERROR" "  • Try manual clone: sudo -u odoo git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git $ENTERPRISE_PATH"
+            echo ""
+            log "WARN" "⚠️  Enterprise will NOT be added to Odoo configuration"
+            echo ""
+            echo "📋 Full log details: $LOG_FILE"
+            echo ""
+            return 1
+        fi
+        
     else
-        log "ERROR" "Failed to clone Enterprise repository"
-        log "ERROR" "Please ensure:"
-        log "ERROR" "  1. You have valid Odoo Partner access"
-        log "ERROR" "  2. SSH key for odoo user is added to GitHub:"
-        log "ERROR" "     sudo -u odoo ssh-keygen -t ed25519 -C 'odoo@yourserver.com'"
-        log "ERROR" "     sudo -u odoo cat ~/.ssh/id_ed25519.pub"
-        log "ERROR" "     Add the public key to: https://github.com/settings/keys"
-        log "ERROR" "  3. Test SSH access: sudo -u odoo ssh -T git@github.com"
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                            ║"
+        echo "║  ❌ ENTERPRISE INSTALLATION FAILED - REPOSITORY CLONE ERROR ❌             ║"
+        echo "║                                                                            ║"
+        echo "╚════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        log "ERROR" "Failed to clone Odoo Enterprise repository from GitHub"
+        log "ERROR" "Target: git@github.com:odoo/enterprise.git (branch 19.0)"
+        log "ERROR" "Destination: $ENTERPRISE_PATH"
+        echo ""
+        log "ERROR" "REQUIRED ACTIONS:"
+        log "ERROR" "  1️⃣  Verify you have valid Odoo Enterprise Partner access"
+        log "ERROR" "  2️⃣  Generate SSH key for odoo user:"
+        log "ERROR" "      sudo -u odoo ssh-keygen -t ed25519 -C 'odoo@yourserver.com'"
+        log "ERROR" "  3️⃣  Display public key:"
+        log "ERROR" "      sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub"
+        log "ERROR" "  4️⃣  Add public key to GitHub: https://github.com/settings/keys"
+        log "ERROR" "  5️⃣  Test SSH connection:"
+        log "ERROR" "      sudo -u odoo ssh -T git@github.com"
+        echo ""
+        log "WARN" "⚠️  Enterprise will NOT be added to Odoo configuration"
+        echo ""
+        echo "📋 Full log details: $LOG_FILE"
+        echo ""
         return 1
     fi
     
-    # Set permissions
-    chown -R odoo:odoo "$ENTERPRISE_PATH"
-    chmod -R 755 "$ENTERPRISE_PATH"
-    
-    log "SUCCESS" "Enterprise directory permissions set"
-    
     # Update Odoo configuration to include enterprise addons
+    # CRITICAL: Only update config if Enterprise directory exists and is valid
+    if [[ ! -d "$ENTERPRISE_PATH" ]] || [[ ! -d "$ENTERPRISE_PATH/.git" ]]; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                            ║"
+        echo "║  ❌ CONFIGURATION UPDATE FAILED - INVALID ENTERPRISE DIRECTORY ❌          ║"
+        echo "║                                                                            ║"
+        echo "╚════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        log "ERROR" "Cannot update Odoo configuration - Enterprise directory not valid"
+        log "ERROR" "Directory path: $ENTERPRISE_PATH"
+        log "ERROR" "Directory exists: $([ -d "$ENTERPRISE_PATH" ] && echo 'YES' || echo 'NO')"
+        log "ERROR" "Git repository: $([ -d "$ENTERPRISE_PATH/.git" ] && echo 'YES' || echo 'NO')"
+        echo ""
+        log "ERROR" "REASON: Enterprise installation failed or incomplete"
+        log "WARN" "⚠️  Enterprise will NOT be added to Odoo configuration"
+        log "WARN" "⚠️  Odoo will start WITHOUT Enterprise modules"
+        echo ""
+        echo "📋 Full log details: $LOG_FILE"
+        echo ""
+        return 1
+    fi
+    
     log "INFO" "Updating Odoo configuration to include Enterprise addons..."
     local odoo_config="/etc/odoo/odoo.conf"
     
     if [[ -f "$odoo_config" ]]; then
+        # Backup config before modification
+        cp "$odoo_config" "${odoo_config}.backup.$(date +%Y%m%d_%H%M%S)" || {
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════════════════╗"
+            echo "║                                                                            ║"
+            echo "║  ❌ CONFIGURATION BACKUP FAILED ❌                                         ║"
+            echo "║                                                                            ║"
+            echo "╚════════════════════════════════════════════════════════════════════════════╝"
+            echo ""
+            log "ERROR" "Failed to create backup of configuration file"
+            log "ERROR" "Config file: $odoo_config"
+            log "ERROR" "Backup destination: ${odoo_config}.backup.$(date +%Y%m%d_%H%M%S)"
+            log "ERROR" "ABORTING: Cannot modify config without backup"
+            echo ""
+            echo "📋 Full log details: $LOG_FILE"
+            echo ""
+            return 1
+        }
+        
         # Check if enterprise path is already in addons_path
         if grep -q "addons_path.*$ENTERPRISE_PATH" "$odoo_config"; then
             log "INFO" "Enterprise path already in addons_path"
@@ -1561,16 +1661,68 @@ install_enterprise() {
             # Get current addons_path
             local current_addons=$(grep "^addons_path" "$odoo_config" | cut -d'=' -f2- | tr -d ' ')
             
+            if [[ -z "$current_addons" ]]; then
+                echo ""
+                echo "╔════════════════════════════════════════════════════════════════════════════╗"
+                echo "║                                                                            ║"
+                echo "║  ❌ CONFIGURATION ERROR - NO ADDONS_PATH FOUND ❌                          ║"
+                echo "║                                                                            ║"
+                echo "╚════════════════════════════════════════════════════════════════════════════╝"
+                echo ""
+                log "ERROR" "No existing addons_path found in configuration"
+                log "ERROR" "Config file: $odoo_config"
+                log "ERROR" "Cannot add Enterprise without existing addons_path"
+                echo ""
+                log "ERROR" "SOLUTION: Run 'Full Installation' to create proper configuration"
+                echo ""
+                echo "📋 Full log details: $LOG_FILE"
+                echo ""
+                return 1
+            fi
+            
             # Build new addons_path with enterprise first (highest priority), then existing paths
             local new_addons="$ENTERPRISE_PATH,$current_addons"
             
             # Update configuration
-            sed -i "s|^addons_path.*|addons_path = $new_addons|" "$odoo_config"
+            sed -i "s|^addons_path.*|addons_path = $new_addons|" "$odoo_config" || {
+                echo ""
+                echo "╔════════════════════════════════════════════════════════════════════════════╗"
+                echo "║                                                                            ║"
+                echo "║  ❌ CONFIGURATION UPDATE FAILED - SED COMMAND ERROR ❌                     ║"
+                echo "║                                                                            ║"
+                echo "╚════════════════════════════════════════════════════════════════════════════╝"
+                echo ""
+                log "ERROR" "Failed to update addons_path in configuration file"
+                log "ERROR" "Config file: $odoo_config"
+                log "ERROR" "Attempted update: addons_path = $new_addons"
+                echo ""
+                log "WARN" "⚠️  Restoring configuration backup..."
+                # Restore backup
+                cp "${odoo_config}.backup."* "$odoo_config" 2>/dev/null && log "SUCCESS" "Backup restored" || log "ERROR" "Backup restore failed!"
+                echo ""
+                echo "📋 Full log details: $LOG_FILE"
+                echo ""
+                return 1
+            }
             log "SUCCESS" "Enterprise path added to addons_path: $new_addons"
         fi
     else
-        log "WARN" "Odoo configuration file not found at $odoo_config"
-        log "WARN" "Please add manually: addons_path = $ENTERPRISE_PATH,/opt/odoo/addons,..."
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                            ║"
+        echo "║  ❌ CONFIGURATION FILE NOT FOUND ❌                                        ║"
+        echo "║                                                                            ║"
+        echo "╚════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        log "ERROR" "Odoo configuration file not found"
+        log "ERROR" "Expected location: $odoo_config"
+        log "ERROR" "Cannot add Enterprise without configuration file"
+        echo ""
+        log "ERROR" "SOLUTION: Run 'Full Installation' to create Odoo configuration"
+        echo ""
+        echo "📋 Full log details: $LOG_FILE"
+        echo ""
+        return 1
     fi
     
     # Restart Odoo to load enterprise modules
@@ -1586,6 +1738,26 @@ install_enterprise() {
         else
             log "ERROR" "Odoo failed to start after Enterprise installation"
             log "INFO" "Check logs: sudo journalctl -u odoo -f"
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════════════════╗"
+            echo "║                                                                            ║"
+            echo "║  ❌ ODOO SERVICE FAILED TO START AFTER ENTERPRISE INSTALLATION ❌          ║"
+            echo "║                                                                            ║"
+            echo "╚════════════════════════════════════════════════════════════════════════════╝"
+            echo ""
+            log "ERROR" "Odoo service is not active after Enterprise installation"
+            log "ERROR" "Enterprise was added to configuration but Odoo won't start"
+            echo ""
+            log "ERROR" "TROUBLESHOOTING COMMANDS:"
+            log "ERROR" "  • Check service status: sudo systemctl status odoo"
+            log "ERROR" "  • View live logs: sudo journalctl -u odoo -f"
+            log "ERROR" "  • View recent errors: sudo journalctl -u odoo -n 50"
+            log "ERROR" "  • Test configuration: odoo -c /etc/odoo/odoo.conf --test-enable"
+            echo ""
+            log "WARN" "⚠️  You may need to run: Fix Enterprise Installation (Fixes & Patches menu)"
+            echo ""
+            echo "📋 Full log details: $LOG_FILE"
+            echo ""
             return 1
         fi
     else
