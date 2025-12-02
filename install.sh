@@ -86,62 +86,105 @@ EOF
 # Usage function
 usage() {
     cat << EOF
-${BOLD}Usage:${NC} $0 [OPTIONS]
+${BOLD}Odoo 19.0 Installation & Upgrade Script${NC}
+${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
 
-${BOLD}Options:${NC}
-    --auto              Run in automatic mode (no prompts)
-    --force             Force reinstall even if Odoo exists
-    --skip-system       Skip system upgrade step
-    --skip-odoo         Skip Odoo installation step
-    --skip-cron         Skip cron setup step
+${BOLD}USAGE:${NC}
+    sudo ./install.sh [OPTIONS]
+    
+${BOLD}QUICK START:${NC}
+    sudo ./install.sh                      # Interactive mode with menu
+    sudo ./install.sh --auto               # Fully automated installation
+    sudo ./install.sh --help               # Show this help
+
+${BOLD}INTERACTIVE MENU:${NC}
+    When running without --auto flag, an interactive menu will guide you through:
+    
+    ${GREEN}1. System Upgrade${NC}           - Update Ubuntu packages and dependencies
+    ${GREEN}2. Odoo Installation${NC}        - Install or upgrade Odoo 19.0
+    ${GREEN}3. Cron Setup${NC}               - Configure automated updates
+    ${GREEN}4. Nginx + SSL Setup${NC}        - Reverse proxy with Let's Encrypt (optional)
+    ${GREEN}5. Enterprise Edition${NC}       - Install Odoo Enterprise addons (optional)
+    ${GREEN}6. Full Installation${NC}        - Run all steps automatically
+    ${GREEN}7. Exit${NC}                     - Cancel installation
+
+${BOLD}OPTIONS:${NC}
+    ${YELLOW}Mode Control:${NC}
+    --auto              Fully automated mode (no prompts, recommended for scripts)
+    --force             Force clean reinstall (removes existing Odoo)
+    
+    ${YELLOW}Skip Steps:${NC}
+    --skip-system       Skip system package updates
+    --skip-odoo         Skip Odoo installation
+    --skip-cron         Skip cron job setup
     --skip-nginx        Skip Nginx reverse proxy setup
-    --nginx-domain      Setup Nginx with SSL for this domain
+    
+    ${YELLOW}Nginx Configuration:${NC}
+    --nginx-domain      Domain name for Nginx + SSL (e.g., odoo.example.com)
     --nginx-email       Email for Let's Encrypt certificate
-    --enterprise        Install Odoo Enterprise edition (requires Odoo partner access)
+    
+    ${YELLOW}Enterprise Edition:${NC}
+    --enterprise        Install Odoo Enterprise edition (requires partner access)
+    
+    ${YELLOW}Other:${NC}
     --no-backup         Don't backup existing installations
     --help              Show this help message
 
-${BOLD}Installation Modes:${NC}
-    Default:            Detect and upgrade existing Odoo or install new
-    --auto:             Fully automated installation with smart detection
-    --force:            Remove existing Odoo and install fresh
-    --skip-system:      Keep existing system, only install/upgrade Odoo
-
-${BOLD}Examples:${NC}
-    $0                          # Interactive installation with detection
-    $0 --auto                   # Automatic installation (recommended)
-    $0 --force --auto           # Force clean installation
-    $0 --skip-system --auto     # Skip system updates, only Odoo
-    $0 --auto --nginx-domain example.com --nginx-email admin@example.com  # With Nginx + SSL
-    $0 --auto --enterprise      # Install with Enterprise edition (requires partner access)
+${BOLD}EXAMPLES:${NC}
+    ${GREEN}# Interactive installation with menu${NC}
+    sudo ./install.sh
     
-${BOLD}Existing Installation Handling:${NC}
-    The script automatically detects existing Odoo installations and:
-    - Backs up existing configuration (/etc/odoo/odoo.conf)
-    - Preserves database data and filestore
-    - Upgrades to Odoo 19.0 while maintaining settings
-    - Merges new configuration options
+    ${GREEN}# Fully automated installation${NC}
+    sudo ./install.sh --auto
+    
+    ${GREEN}# Force clean installation${NC}
+    sudo ./install.sh --force --auto
+    
+    ${GREEN}# Install with Nginx + SSL${NC}
+    sudo ./install.sh --auto \\
+        --nginx-domain odoo.example.com \\
+        --nginx-email admin@example.com
+    
+    ${GREEN}# Install Enterprise edition${NC}
+    sudo ./install.sh --auto --enterprise
+    
+    ${GREEN}# Skip system updates, only install Odoo${NC}
+    sudo ./install.sh --skip-system --auto
 
-${BOLD}Installation Steps:${NC}
-    1. Detection of existing Odoo installations
-    2. System preparation and package updates (if not skipped)
-    3. Backup of existing installation (if found)
-    4. Odoo 19.0 installation or upgrade
-    5. Configuration merge and service setup
-    6. Automatic update cron jobs setup
-    7. System verification and testing
+${BOLD}FEATURES:${NC}
+    ✓ Automatic detection of existing Odoo installations
+    ✓ Intelligent upgrade from older versions to 19.0
+    ✓ Backup of existing configurations and data
+    ✓ Automated weekly updates via cron jobs
+    ✓ Optional Nginx reverse proxy with Let's Encrypt SSL
+    ✓ Optional Odoo Enterprise edition support
+    ✓ Custom addons directories: /opt/odoo/custom-addons, /var/custom-addons
+    ✓ Comprehensive logging and error handling
 
-${BOLD}Requirements:${NC}
+${BOLD}REQUIREMENTS:${NC}
     - Ubuntu 20.04 LTS or higher
     - Root/sudo access
     - Internet connection
-    - At least 4GB RAM and 20GB disk space
+    - 4GB RAM (minimum 2GB)
+    - 20GB free disk space
+    - For Nginx: Domain must point to server IP
+    - For Enterprise: Valid Odoo partner access + GitHub SSH key
 
-${BOLD}Log Files:${NC}
-    - Installation: $LOG_DIR/install-*.log
-    - System Updates: $LOG_DIR/upgrade-system-*.log
-    - Odoo Installation: $LOG_DIR/install-odoo19-*.log
-    - Cron Setup: $LOG_DIR/setup-cron-*.log
+${BOLD}DOCUMENTATION:${NC}
+    📖 Full documentation: ${BLUE}https://github.com/Hammdie/odoo-upgrade-cron${NC}
+    📝 Enterprise setup guide: See README.md section "Odoo Enterprise Edition"
+    🔧 Troubleshooting: See README.md section "Troubleshooting"
+
+${BOLD}LOG FILES:${NC}
+    Installation logs: ${BLUE}$LOG_DIR/install-*.log${NC}
+    Odoo logs:        ${BLUE}/var/log/odoo/odoo.log${NC}
+
+${BOLD}SUPPORT:${NC}
+    🐛 Issues: https://github.com/Hammdie/odoo-upgrade-cron/issues
+    💬 Discussions: https://github.com/Hammdie/odoo-upgrade-cron/discussions
+    📧 Enterprise support: support@detelx.de
+
+${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
 EOF
 }
 
@@ -267,6 +310,172 @@ check_requirements() {
     fi
     
     log "SUCCESS" "System requirements check passed"
+}
+
+# Display interactive menu
+show_interactive_menu() {
+    # Skip menu in auto mode
+    if [[ "$AUTO_MODE" == true ]]; then
+        return 0
+    fi
+    
+    while true; do
+        echo
+        echo -e "${BLUE}${BOLD}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${BLUE}${BOLD}║        Odoo 19.0 Installation - Interactive Menu         ║${NC}"
+        echo -e "${BLUE}${BOLD}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo
+        echo -e "${GREEN}Please select an option:${NC}"
+        echo
+        echo -e "  ${YELLOW}1)${NC} ${BOLD}System Upgrade${NC}"
+        echo -e "     Update Ubuntu packages and install dependencies"
+        echo
+        echo -e "  ${YELLOW}2)${NC} ${BOLD}Odoo Installation${NC}"
+        echo -e "     Install or upgrade Odoo 19.0"
+        echo
+        echo -e "  ${YELLOW}3)${NC} ${BOLD}Cron Setup${NC}"
+        echo -e "     Configure automated updates and backups"
+        echo
+        echo -e "  ${YELLOW}4)${NC} ${BOLD}Nginx + SSL Setup${NC}"
+        echo -e "     Setup reverse proxy with Let's Encrypt certificate"
+        echo
+        echo -e "  ${YELLOW}5)${NC} ${BOLD}Enterprise Edition${NC}"
+        echo -e "     Install Odoo Enterprise addons (requires partner access)"
+        echo
+        echo -e "  ${YELLOW}6)${NC} ${BOLD}Full Installation${NC}"
+        echo -e "     Run all steps automatically (recommended)"
+        echo
+        echo -e "  ${YELLOW}7)${NC} ${BOLD}Show Help${NC}"
+        echo -e "     Display detailed usage information"
+        echo
+        echo -e "  ${RED}0)${NC} ${BOLD}Exit${NC}"
+        echo -e "     Cancel installation"
+        echo
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-7]: "${NC})" choice
+        
+        case $choice in
+            1)
+                echo
+                log "INFO" "Starting System Upgrade..."
+                SKIP_ODOO_INSTALL=true
+                SKIP_CRON_SETUP=true
+                SKIP_NGINX_SETUP=true
+                return 0
+                ;;
+            2)
+                echo
+                log "INFO" "Starting Odoo Installation..."
+                SKIP_SYSTEM_UPDATE=true
+                SKIP_CRON_SETUP=true
+                SKIP_NGINX_SETUP=true
+                return 0
+                ;;
+            3)
+                echo
+                log "INFO" "Starting Cron Setup..."
+                SKIP_SYSTEM_UPDATE=true
+                SKIP_ODOO_INSTALL=true
+                SKIP_NGINX_SETUP=true
+                return 0
+                ;;
+            4)
+                echo
+                echo -e "${YELLOW}Nginx + SSL Setup${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━${NC}"
+                read -p "Enter domain name (e.g., odoo.example.com): " NGINX_DOMAIN
+                read -p "Enter email for Let's Encrypt: " NGINX_EMAIL
+                
+                if [[ -z "$NGINX_DOMAIN" ]] || [[ -z "$NGINX_EMAIL" ]]; then
+                    echo -e "${RED}Error: Domain and email are required${NC}"
+                    sleep 2
+                    continue
+                fi
+                
+                SETUP_NGINX=true
+                SKIP_SYSTEM_UPDATE=true
+                SKIP_ODOO_INSTALL=true
+                SKIP_CRON_SETUP=true
+                return 0
+                ;;
+            5)
+                echo
+                echo -e "${YELLOW}Enterprise Edition Setup${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${YELLOW}Requirements:${NC}"
+                echo -e "  • Valid Odoo Enterprise subscription"
+                echo -e "  • SSH key configured for GitHub"
+                echo -e "  • Access to git@github.com:odoo/enterprise.git"
+                echo
+                echo -e "${BLUE}For SSH key setup instructions, see:${NC}"
+                echo -e "  https://github.com/Hammdie/odoo-upgrade-cron#odoo-enterprise-edition"
+                echo
+                read -p "Continue with Enterprise installation? (y/N): " -n 1 -r
+                echo
+                
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    INSTALL_ENTERPRISE=true
+                    SKIP_SYSTEM_UPDATE=true
+                    SKIP_ODOO_INSTALL=true
+                    SKIP_CRON_SETUP=true
+                    SKIP_NGINX_SETUP=true
+                    return 0
+                else
+                    continue
+                fi
+                ;;
+            6)
+                echo
+                log "INFO" "Starting Full Installation..."
+                echo -e "${GREEN}This will run all installation steps:${NC}"
+                echo -e "  1. System Upgrade"
+                echo -e "  2. Odoo Installation"
+                echo -e "  3. Cron Setup"
+                echo
+                read -p "Do you want to include Nginx + SSL? (y/N): " -n 1 -r
+                echo
+                
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    read -p "Enter domain name: " NGINX_DOMAIN
+                    read -p "Enter email for Let's Encrypt: " NGINX_EMAIL
+                    
+                    if [[ -n "$NGINX_DOMAIN" ]] && [[ -n "$NGINX_EMAIL" ]]; then
+                        SETUP_NGINX=true
+                    fi
+                fi
+                
+                echo
+                read -p "Do you want to install Enterprise edition? (y/N): " -n 1 -r
+                echo
+                
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    INSTALL_ENTERPRISE=true
+                fi
+                
+                return 0
+                ;;
+            7)
+                clear
+                usage
+                echo
+                read -p "Press Enter to continue..."
+                show_banner
+                continue
+                ;;
+            0)
+                echo
+                log "INFO" "Installation cancelled by user"
+                exit 0
+                ;;
+            *)
+                echo
+                echo -e "${RED}Invalid option. Please select 0-7.${NC}"
+                sleep 2
+                show_banner
+                ;;
+        esac
+    done
 }
 
 # Display installation summary
@@ -1383,7 +1592,10 @@ main() {
     # Handle existing installation
     handle_existing_installation
     
-    # Show installation plan (after detection)
+    # Show interactive menu (only in interactive mode)
+    show_interactive_menu
+    
+    # Show installation plan (after menu selection)
     show_installation_plan
     
     # Backup existing installation
