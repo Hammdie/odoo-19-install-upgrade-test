@@ -139,16 +139,30 @@ download_odoo() {
 purge_odoo_dependencies() {
     log "INFO" "Removing previously installed Odoo Python dependencies..."
 
+    local anything_removed=false
+
     if python3 -m pip show odoo &>/dev/null; then
         python3 -m pip uninstall -y odoo 2>&1 | tee -a "$LOG_FILE" || true
+        anything_removed=true
     fi
 
-    local requirements_file="$ODOO_HOME/odoo/requirements.txt"
-    if [[ -f "$requirements_file" ]]; then
-        python3 -m pip uninstall -y -r "$requirements_file" 2>&1 | tee -a "$LOG_FILE" || {
-            log "WARN" "Some requirements could not be removed (may not have been installed)"
-        }
+    # Gather possible requirements files (current installation, latest backup, new clone)
+    local requirements_candidates=()
+    if [[ -f "$ODOO_HOME/odoo/requirements.txt" ]]; then
+        requirements_candidates+=("$ODOO_HOME/odoo/requirements.txt")
     fi
+
+    local latest_backup
+    latest_backup=$(ls -1dt "$ODOO_HOME"/odoo.backup.* 2>/dev/null | head -n1 || true)
+    if [[ -n "$latest_backup" && -f "$latest_backup/requirements.txt" ]]; then
+        requirements_candidates+=("$latest_backup/requirements.txt")
+    fi
+
+    for req_file in "${requirements_candidates[@]}"; do
+        log "INFO" "Removing dependencies listed in $req_file"
+        python3 -m pip uninstall -y -r "$req_file" 2>&1 | tee -a "$LOG_FILE" || true
+        anything_removed=true
+    done
 
     local extra_packages=(
         "psycopg2-binary"
@@ -159,10 +173,17 @@ purge_odoo_dependencies() {
     )
 
     for pkg in "${extra_packages[@]}"; do
-        python3 -m pip uninstall -y "$pkg" 2>&1 | tee -a "$LOG_FILE" || true
+        if python3 -m pip show "$pkg" &>/dev/null; then
+            python3 -m pip uninstall -y "$pkg" 2>&1 | tee -a "$LOG_FILE" || true
+            anything_removed=true
+        fi
     done
 
-    log "SUCCESS" "Previous Odoo dependencies removed"
+    if [[ "$anything_removed" == true ]]; then
+        log "SUCCESS" "Previous Odoo dependencies removed"
+    else
+        log "INFO" "No existing Odoo dependencies found to remove"
+    fi
 }
 
 # Install Odoo Python dependencies
@@ -351,7 +372,7 @@ install_odoo_package() {
     log "INFO" "Installing Odoo as Python package..."
     
     cd "$ODOO_HOME/odoo"
-    python3 -m pip install -e . 2>&1 | tee -a "$LOG_FILE"
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -e . 2>&1 | tee -a "$LOG_FILE"
     
     log "SUCCESS" "Odoo package installed"
 }
@@ -471,6 +492,7 @@ main() {
     check_root
     check_prerequisites
     stop_odoo_service
+    purge_odoo_dependencies
     download_odoo
     purge_odoo_dependencies
     install_odoo_dependencies
