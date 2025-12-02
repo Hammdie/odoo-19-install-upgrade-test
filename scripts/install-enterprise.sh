@@ -172,6 +172,8 @@ setup_ssh_key() {
     
     # Test SSH connection with current user - initial check
     local github_auth_ok=false
+    local repo_access_ok=false
+    
     if $has_ed25519 || $has_rsa; then
         log "INFO" "Testing SSH connection to GitHub..."
         local test_output
@@ -180,30 +182,33 @@ setup_ssh_key() {
         if echo "$test_output" | grep -q "successfully authenticated"; then
             log "SUCCESS" "SSH authentication verified for $current_user"
             github_auth_ok=true
-        else
-            log "WARN" "SSH key exists but GitHub authentication failed"
-        fi
-        
-        # Test Enterprise repository access
-        if $github_auth_ok; then
+            
+            # Test Enterprise repository access
             log "INFO" "Testing access to Enterprise repository..."
             local repo_test_output
             repo_test_output=$(su - "$current_user" -c "git ls-remote git@github.com:odoo/enterprise.git HEAD" 2>&1)
             
             if [[ $? -eq 0 ]]; then
                 log "SUCCESS" "Access to Enterprise repository confirmed!"
+                repo_access_ok=true
+                echo
                 echo -e "${GREEN}${BOLD}✓ GitHub authentication successful${NC}"
                 echo -e "${GREEN}${BOLD}✓ Enterprise repository access confirmed${NC}"
+                echo -e "${GREEN}${BOLD}✓ Ready to clone Enterprise repository${NC}"
                 echo
+                read -p "Press Enter to continue with installation..."
                 return 0
             else
                 log "ERROR" "No access to Enterprise repository"
+                echo
                 echo -e "${RED}${BOLD}✗ Enterprise repository access denied${NC}"
                 echo
                 echo -e "${YELLOW}Your GitHub account does not have access to odoo/enterprise${NC}"
                 echo -e "${YELLOW}Contact your Odoo Partner or sales@odoo.com to request access${NC}"
                 echo
             fi
+        else
+            log "WARN" "SSH key exists but GitHub authentication failed"
         fi
     else
         log "WARN" "No SSH keys found for $current_user"
