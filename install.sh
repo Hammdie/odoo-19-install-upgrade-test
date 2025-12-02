@@ -2026,6 +2026,17 @@ show_final_summary() {
         echo -e "${YELLOW}5.${NC} (Optional) Set up SSL/TLS: sudo $PROJECT_ROOT/scripts/setup-odoo-nginx.sh <domain> <email>"
     fi
     
+    # Check if pgvector is installed
+    if sudo -u postgres psql -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | grep -q "[0-9]"; then
+        local pgvector_version=$(sudo -u postgres psql -t -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | xargs)
+        echo
+        echo -e "${BLUE}${BOLD}AI/RAG Support:${NC}"
+        echo -e "${BLUE}===============${NC}"
+        echo -e "${GREEN}🤖 pgvector Extension:${NC} Installed (v$pgvector_version)"
+        echo -e "${GREEN}💡 Enable in database:${NC} CREATE EXTENSION vector;"
+        echo -e "${GREEN}📚 Documentation:${NC} https://github.com/pgvector/pgvector"
+    fi
+    
     # Useful commands
     echo
     echo -e "${BLUE}${BOLD}Useful Commands:${NC}"
