@@ -1275,6 +1275,7 @@ install_enterprise() {
         if systemctl is-active --quiet odoo; then
             log "SUCCESS" "Odoo Enterprise installation completed successfully"
             log "INFO" "Enterprise modules are now available in Odoo"
+            return 0
         else
             log "ERROR" "Odoo failed to start after Enterprise installation"
             log "INFO" "Check logs: sudo journalctl -u odoo -f"
@@ -1283,12 +1284,7 @@ install_enterprise() {
     else
         log "WARN" "Odoo service is not running - skipping restart"
         log "INFO" "Enterprise modules will be available after starting Odoo"
-    fi
         return 0
-    else
-        log "ERROR" "Odoo failed to start after Enterprise installation"
-        log "INFO" "Check logs: sudo journalctl -u odoo -f"
-        return 1
     fi
 }
 
