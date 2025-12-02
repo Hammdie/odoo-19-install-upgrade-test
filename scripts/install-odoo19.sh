@@ -526,6 +526,83 @@ EOF
     fi
 }
 
+# Install pgvector extension for RAG (Retrieval-Augmented Generation)
+install_pgvector() {
+    log "INFO" "Installing pgvector extension for AI/RAG support..."
+    
+    # Find PostgreSQL version
+    local pg_version=$(sudo -u postgres psql -t -c "SHOW server_version;" 2>/dev/null | grep -o '[0-9]*' | head -n1)
+    if [[ -z "$pg_version" ]]; then
+        pg_version=$(ls /etc/postgresql/ 2>/dev/null | head -n1)
+    fi
+    
+    if [[ -z "$pg_version" ]]; then
+        log "WARN" "Could not detect PostgreSQL version - skipping pgvector installation"
+        return 0
+    fi
+    
+    log "INFO" "Detected PostgreSQL version: $pg_version"
+    
+    # Install build dependencies and PostgreSQL development headers
+    log "INFO" "Installing build dependencies..."
+    apt-get install -y \
+        postgresql-server-dev-$pg_version \
+        build-essential \
+        git \
+        make \
+        gcc \
+        postgresql-common 2>&1 | tee -a "$LOG_FILE" || {
+        log "WARN" "Failed to install build dependencies - pgvector installation may fail"
+    }
+    
+    # Clone and build pgvector
+    log "INFO" "Cloning pgvector from GitHub..."
+    local pgvector_dir="/tmp/pgvector-$(date +%Y%m%d%H%M%S)"
+    
+    if git clone --depth 1 https://github.com/pgvector/pgvector.git "$pgvector_dir" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "pgvector repository cloned"
+        
+        # Build and install
+        log "INFO" "Building and installing pgvector..."
+        cd "$pgvector_dir" || return 1
+        
+        if make 2>&1 | tee -a "$LOG_FILE" && make install 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "pgvector compiled and installed successfully"
+            
+            # Enable extension in PostgreSQL
+            log "INFO" "Enabling pgvector extension in PostgreSQL..."
+            sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>&1 | tee -a "$LOG_FILE" || {
+                log "WARN" "Could not enable vector extension in default database"
+                log "INFO" "Extension will be available for manual activation per database"
+            }
+            
+            # Verify installation
+            if sudo -u postgres psql -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | grep -q "[0-9]"; then
+                local vector_version=$(sudo -u postgres psql -t -c "SELECT extversion FROM pg_extension WHERE extname='vector';" | xargs)
+                log "SUCCESS" "pgvector extension installed and enabled (version $vector_version)"
+                log "INFO" "RAG capabilities are now available for Odoo AI agents"
+            else
+                log "INFO" "pgvector installed - enable per database with: CREATE EXTENSION vector;"
+            fi
+            
+            # Cleanup
+            cd /
+            rm -rf "$pgvector_dir"
+            log "INFO" "Build directory cleaned up"
+        else
+            log "ERROR" "Failed to build pgvector"
+            log "INFO" "See documentation: https://github.com/pgvector/pgvector"
+            cd /
+            rm -rf "$pgvector_dir"
+            return 1
+        fi
+    else
+        log "ERROR" "Failed to clone pgvector repository"
+        log "INFO" "Manual installation: https://github.com/pgvector/pgvector"
+        return 1
+    fi
+}
+
 # Create systemd service
 create_systemd_service() {
     log "INFO" "Creating systemd service for Odoo..."
@@ -720,6 +797,7 @@ main() {
     create_odoo_config
     setup_database
     setup_postgres_trust
+    install_pgvector
     setup_custom_addons
     create_systemd_service
     setup_log_rotation

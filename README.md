@@ -28,14 +28,14 @@ Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die voll
 ### System-Anforderungen
 - Ubuntu 20.04 LTS oder höher
 - Python 3.8+ (mit phonenumbers, lxml, requests)
-- PostgreSQL 12+ mit Vector-Extension
+- PostgreSQL 12+ mit pgvector-Extension für AI/RAG
 - Node.js 16+ mit rtlcss für RTL-Sprachen
 - wkhtmltopdf 0.12.6.1 mit Qt-Patch
 - Mindestens 4GB RAM
 - 20GB freier Speicherplatz
 
 ### Geprüfte Dependencies (automatisch getestet)
-- **PostgreSQL Vector Extension:** Für erweiterte Suchfunktionen
+- **PostgreSQL pgvector Extension:** Für RAG (Retrieval-Augmented Generation) und AI Agents mit Vector-Similarity Search
 - **wkhtmltopdf Qt-Patch:** Für PDF-Generierung mit korrekter Darstellung
 - **Python phonenumbers:** Für internationale Telefonnummern-Validierung
 - **Node.js rtlcss:** Für Right-to-Left Sprachen (Arabisch, Hebräisch)
@@ -461,6 +461,7 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 | **`fix-postgres-auth.sh`** | **Konfiguriert PostgreSQL für Peer-Authentifizierung** | **1.1.0** |
 | **`test-odoo-user-permissions.sh`** | **Testet odoo-Benutzer Datenbankberechtigungen** | **1.1.0** |
 | **`scripts/set-postgres-password.sh`** | **Setzt PostgreSQL-Passwort für odoo-Benutzer** | **1.1.0** |
+| **`scripts/install-pgvector.sh`** | **Installiert pgvector Extension für AI/RAG** | **1.2.0** |
 
 ## Ordnerstruktur
 
@@ -671,6 +672,64 @@ sudo ./scripts/set-postgres-password.sh
 # db_user = odoo
 # db_password = your_password
 ```
+
+### PostgreSQL pgvector Extension für AI/RAG
+
+**Automatische Installation (bei Full Installation bereits integriert):**
+```bash
+# pgvector wird automatisch bei der Full Installation installiert
+sudo ./install.sh
+# Wähle Option 6: Full Installation
+
+# Oder direkt über Fixes & Patches Menu:
+# Wähle Option 5: Fixes & Patches
+# Dann Option 11: Install pgvector for RAG/AI
+```
+
+**Manuelle Installation:**
+```bash
+# pgvector separat installieren
+sudo ./scripts/install-pgvector.sh
+```
+
+**Was ist pgvector?**
+- PostgreSQL Extension für **Vector Similarity Search**
+- Ermöglicht **RAG (Retrieval-Augmented Generation)** für Odoo AI Agents
+- Speichert und durchsucht hochdimensionale Vektoren effizient
+- Essentiell für moderne KI-Features in Odoo 19.0
+
+**Verwendung in Odoo:**
+```sql
+-- Extension in Datenbank aktivieren
+psql -U odoo -d your_database_name -c 'CREATE EXTENSION vector;'
+
+-- Verifikation
+psql -U odoo -d your_database_name -c "SELECT extversion FROM pg_extension WHERE extname='vector';"
+
+-- Beispiel: Tabelle mit Vektoren erstellen
+CREATE TABLE embeddings (
+    id SERIAL PRIMARY KEY,
+    content TEXT,
+    embedding vector(1536)  -- z.B. für OpenAI embeddings
+);
+
+-- Ähnlichkeitssuche (cosine distance)
+SELECT content, embedding <=> '[0.1, 0.2, ...]'::vector AS distance
+FROM embeddings
+ORDER BY distance
+LIMIT 5;
+```
+
+**Use Cases in Odoo:**
+- 🤖 **AI-Chatbots** mit Kontext-basierter Antwortsuche
+- 📚 **Knowledge Base** mit semantischer Suche
+- 🔍 **Produktempfehlungen** basierend auf Vektorähnlichkeit
+- 📝 **Dokumentenklassifizierung** mit Embeddings
+- 💬 **Intelligente Kundenservice-Antworten**
+
+**Weitere Informationen:**
+- GitHub: https://github.com/pgvector/pgvector
+- Dokumentation: https://github.com/pgvector/pgvector#getting-started
 
 ### Debug-Modus
 

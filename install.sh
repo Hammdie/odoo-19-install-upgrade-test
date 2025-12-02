@@ -126,12 +126,15 @@ show_fixes_menu() {
         echo -e "  ${GREEN}10)${NC} Fix Enterprise Installation"
         echo -e "      Repair failed or incomplete Enterprise installation"
         echo
+        echo -e "  ${GREEN}11)${NC} Install pgvector for RAG/AI"
+        echo -e "      Add PostgreSQL vector extension for AI agents"
+        echo
         echo -e "  ${RED}0)${NC} Back to Main Menu"
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-10]: "${NC})" fix_choice
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-11]: "${NC})" fix_choice
         
         case $fix_choice in
             1)
@@ -264,13 +267,31 @@ show_fixes_menu() {
                 echo
                 read -p "Press Enter to continue..."
                 ;;
+            11)
+                echo
+                echo -e "${YELLOW}Install pgvector for RAG/AI${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                echo -e "${GREEN}About pgvector:${NC}"
+                echo "PostgreSQL extension for vector similarity search"
+                echo "Required for RAG (Retrieval-Augmented Generation) in Odoo AI agents"
+                echo "Documentation: https://github.com/pgvector/pgvector"
+                echo
+                if [[ -f "$PROJECT_ROOT/scripts/install-pgvector.sh" ]]; then
+                    bash "$PROJECT_ROOT/scripts/install-pgvector.sh"
+                else
+                    echo -e "${RED}Error: scripts/install-pgvector.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
             0)
                 show_banner
                 return 0
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-10.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-11.${NC}"
                 sleep 2
                 ;;
         esac
