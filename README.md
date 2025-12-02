@@ -489,12 +489,19 @@ sudo systemctl restart postgresql
 
 6. **pip „externally-managed-environment" Fehler (Ubuntu 22.04/24.04):**
    ```bash
-   # Verwende --break-system-packages
+   # Die Scripts verwenden automatisch --break-system-packages
+   # und setzen PIP_BREAK_SYSTEM_PACKAGES=1
+   
+   # Manuelle Installation falls nötig:
    python3 -m pip install --break-system-packages <paket>
    
-   # Oder führe das Installationsscript erneut aus (behebt dies automatisch)
+   # Oder führe das Installationsscript erneut aus:
    sudo ./scripts/install-odoo19.sh
    ```
+   
+   **Hinweis:** Alle Scripts (`install-odoo19.sh`, `upgrade-system.sh`, `weekly-odoo-update.sh`) 
+   sind bereits für Ubuntu 22.04/24.04 PEP 668 konfiguriert und verwenden automatisch 
+   `--break-system-packages` sowie die Umgebungsvariable `PIP_BREAK_SYSTEM_PACKAGES=1`.
 
 7. **Fehlende Dependencies:**
    ```bash

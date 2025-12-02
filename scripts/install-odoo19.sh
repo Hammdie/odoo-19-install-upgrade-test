@@ -27,10 +27,11 @@ DB_USER="${DB_USER:-$ODOO_USER}"
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 
 # Pip options (Ubuntu/Debian enforce Externally Managed Env)
-declare -a PIP_INSTALL_ARGS
-if python3 -m pip --help 2>&1 | grep -q -- "--break-system-packages"; then
-    PIP_INSTALL_ARGS+=("--break-system-packages")
-fi
+# Always use --break-system-packages for system-wide Odoo installation
+declare -a PIP_INSTALL_ARGS=("--break-system-packages")
+
+# Also set PEP 668 override environment variable
+export PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Colors for output
 RED='\033[0;31m'

@@ -19,6 +19,13 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BACKUP_BEFORE_UPDATE=true
 BACKUP_DIR="$PROJECT_ROOT/backups"
 
+# Pip options (Ubuntu/Debian enforce Externally Managed Env)
+# Always use --break-system-packages for system-wide Odoo installation
+declare -a PIP_INSTALL_ARGS=("--break-system-packages")
+
+# Also set PEP 668 override environment variable
+export PIP_BREAK_SYSTEM_PACKAGES=1
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -243,11 +250,11 @@ update_odoo_source() {
         # Update Python dependencies
         log "INFO" "Updating Python dependencies..."
         if [[ -f requirements.txt ]]; then
-            python3 -m pip install -r requirements.txt --upgrade 2>&1 | tee -a "$LOG_FILE"
+            python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -r requirements.txt --upgrade 2>&1 | tee -a "$LOG_FILE"
         fi
         
         # Reinstall Odoo package
-        python3 -m pip install -e . --upgrade 2>&1 | tee -a "$LOG_FILE"
+        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -e . --upgrade 2>&1 | tee -a "$LOG_FILE"
         
         return 0
     else
