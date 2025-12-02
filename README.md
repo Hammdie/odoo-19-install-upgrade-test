@@ -124,15 +124,23 @@ Das Repository unterstützt die optionale Installation der **Odoo Enterprise Edi
 
 **Während der Installation:**
 ```bash
+# Enterprise während der Hauptinstallation aktivieren
 sudo ./install.sh --auto --enterprise
 ```
 
-**Nach der Installation:**
+**Nach der Installation (nachträgliche Enterprise-Installation):**
 ```bash
-# Enterprise-Addons werden automatisch in wöchentlichen Updates aktualisiert
-# Manuelle Installation:
+# Interaktives Installationsscript mit SSH-Key Setup
+sudo ./scripts/install-enterprise.sh
+```
+
+**Manuelle Installation (für Experten):**
+```bash
 cd /opt/odoo
 sudo -u odoo git clone git@github.com:odoo/enterprise.git --depth 1 --branch 19.0
+# Odoo-Konfiguration manuell anpassen
+sudo nano /etc/odoo/odoo.conf
+sudo systemctl restart odoo
 ```
 
 **Features:**
@@ -335,10 +343,11 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 | `scripts/install-odoo19.sh` | Odoo 19.0 Installation | 1.2.0 |
 | `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.1.0 |
 | `scripts/setup-odoo-nginx.sh` | **Nginx Reverse Proxy + SSL/TLS Setup** | **1.2.0** |
+| **`scripts/install-enterprise.sh`** | **Nachträgliche Enterprise Edition Installation** | **1.2.0** |
 | `scripts/backup-odoo.sh` | Odoo-Datenbank Backup | 1.0.0 |
 | `scripts/restore-odoo.sh` | Odoo-Datenbank Wiederherstellung | 1.0.0 |
 | `scripts/daily-maintenance.sh` | Tägliche Wartungsaufgaben | 1.0.0 |
-| `scripts/weekly-odoo-update.sh` | Wöchentliche Odoo-Updates | 1.0.0 |
+| `scripts/weekly-odoo-update.sh` | Wöchentliche Odoo-Updates (inkl. Enterprise) | 1.2.0 |
 | **`repair-database.sh`** | **Repariert PostgreSQL-Authentifizierungsprobleme** | **1.1.0** |
 | **`fix-firewall.sh`** | **Konfiguriert UFW-Firewall für Odoo** | **1.1.0** |
 | **`test-odoo-dependencies.sh`** | **Testet alle Odoo-Abhängigkeiten umfassend** | **1.1.0** |
@@ -699,6 +708,8 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 - **Interaktive Admin-Passwort Abfrage:** Sichere Eingabe des Odoo Master-Passworts während Installation
 - **Nginx Reverse Proxy Integration:** `--nginx-domain` und `--nginx-email` Flags für automatisches SSL/TLS Setup
 - **Odoo Enterprise Edition Support:** `--enterprise` Flag für automatische Installation der Enterprise-Addons
+- **Nachträgliche Enterprise-Installation:** Neues Script `install-enterprise.sh` für spätere Enterprise-Installation
+- **Interaktives SSH-Key Setup:** Enterprise-Script bietet 4 Optionen für SSH-Konfiguration (Test, Generierung, Skip, Abbruch)
 - **Custom Addons Verzeichnisse:** Automatische Erstellung von `/opt/odoo/custom-addons` und `/var/custom-addons`
 - **Erweiterte Addons-Pfad Konfiguration:** Unterstützung für Enterprise, Core, Custom Addons mit Prioritätsreihenfolge
 - **Odoo 19.0 Systemd-Anpassung:** `Type=simple` statt `Type=forking` (--daemon entfernt)
@@ -716,6 +727,7 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 | Script | Beschreibung |
 |--------|-------------|
 | `scripts/setup-odoo-nginx.sh` | Nginx Reverse Proxy + SSL/TLS Setup mit Let's Encrypt |
+| **`scripts/install-enterprise.sh`** | **Nachträgliche Enterprise Edition Installation mit interaktivem SSH-Key Setup** |
 
 ### Version 1.1.0 (2025-11-14)
 - **Verbesserte PostgreSQL-Authentifizierung:** Peer-Authentication für Produktionsumgebungen

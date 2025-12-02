@@ -967,47 +967,71 @@ install_enterprise() {
     
     log "INFO" "Installing Odoo Enterprise edition..."
     
+    # Check if odoo user exists
+    if ! id -u odoo &>/dev/null; then
+        log "ERROR" "User 'odoo' does not exist. Please install Odoo first."
+        return 1
+    fi
+    
     # Check if Git is available
     if ! command -v git &> /dev/null; then
         log "ERROR" "Git is not installed. Cannot clone Enterprise repository."
         return 1
     fi
     
-    # Check SSH access to Odoo Enterprise repository
-    log "INFO" "Verifying access to Odoo Enterprise repository..."
-    if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-        log "WARN" "SSH key authentication may not be configured for GitHub"
-        log "INFO" "Attempting to clone Enterprise repository..."
+    # Check SSH access to Odoo Enterprise repository as odoo user
+    log "INFO" "Verifying SSH access to Odoo Enterprise repository as odoo user..."
+    if sudo -u odoo ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        log "SUCCESS" "SSH authentication verified for odoo user"
+    else
+        log "WARN" "SSH key may not be configured for odoo user"
+        log "WARN" "Attempting to clone anyway - may require manual SSH key setup"
+        log "INFO" "Setup SSH key with: sudo -u odoo ssh-keygen -t ed25519 -C 'odoo@yourserver.com'"
     fi
     
-    # Create enterprise directory
-    mkdir -p "$ENTERPRISE_PATH"
+    # Create parent directory if not exists
+    local parent_dir="$(dirname "$ENTERPRISE_PATH")"
+    if [[ ! -d "$parent_dir" ]]; then
+        log "INFO" "Creating parent directory: $parent_dir"
+        mkdir -p "$parent_dir"
+        chown odoo:odoo "$parent_dir"
+    fi
     
     # Backup existing enterprise installation if exists
     if [[ -d "$ENTERPRISE_PATH/.git" ]]; then
         log "INFO" "Existing Enterprise installation found - backing up..."
         mv "$ENTERPRISE_PATH" "$ENTERPRISE_PATH.backup.$(date +%Y%m%d-%H%M%S)"
-        mkdir -p "$ENTERPRISE_PATH"
+    fi
+    
+    # Remove directory if it exists but is not a git repo
+    if [[ -d "$ENTERPRISE_PATH" ]] && [[ ! -d "$ENTERPRISE_PATH/.git" ]]; then
+        log "WARN" "Removing non-git Enterprise directory"
+        rm -rf "$ENTERPRISE_PATH"
     fi
     
     # Clone Enterprise repository
     log "INFO" "Cloning Odoo Enterprise from git@github.com:odoo/enterprise.git (branch 19.0)..."
-    cd "$(dirname "$ENTERPRISE_PATH")"
+    log "INFO" "Target directory: $ENTERPRISE_PATH"
     
-    if sudo -u odoo git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$(basename "$ENTERPRISE_PATH")" 2>&1 | tee -a "$LOG_FILE"; then
+    if sudo -u odoo git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "Enterprise repository cloned successfully"
     else
         log "ERROR" "Failed to clone Enterprise repository"
         log "ERROR" "Please ensure:"
         log "ERROR" "  1. You have valid Odoo Partner access"
-        log "ERROR" "  2. Your SSH key is added to GitHub"
-        log "ERROR" "  3. SSH key has access to odoo/enterprise repository"
+        log "ERROR" "  2. SSH key for odoo user is added to GitHub:"
+        log "ERROR" "     sudo -u odoo ssh-keygen -t ed25519 -C 'odoo@yourserver.com'"
+        log "ERROR" "     sudo -u odoo cat ~/.ssh/id_ed25519.pub"
+        log "ERROR" "     Add the public key to: https://github.com/settings/keys"
+        log "ERROR" "  3. Test SSH access: sudo -u odoo ssh -T git@github.com"
         return 1
     fi
     
     # Set permissions
     chown -R odoo:odoo "$ENTERPRISE_PATH"
     chmod -R 755 "$ENTERPRISE_PATH"
+    
+    log "SUCCESS" "Enterprise directory permissions set"
     
     # Update Odoo configuration to include enterprise addons
     log "INFO" "Updating Odoo configuration to include Enterprise addons..."
@@ -1026,20 +1050,31 @@ install_enterprise() {
             
             # Update configuration
             sed -i "s|^addons_path.*|addons_path = $new_addons|" "$odoo_config"
-            log "SUCCESS" "Enterprise path added to addons_path"
+            log "SUCCESS" "Enterprise path added to addons_path: $new_addons"
         fi
     else
         log "WARN" "Odoo configuration file not found at $odoo_config"
+        log "WARN" "Please add manually: addons_path = $ENTERPRISE_PATH,/opt/odoo/addons,..."
     fi
     
     # Restart Odoo to load enterprise modules
-    log "INFO" "Restarting Odoo to load Enterprise modules..."
-    systemctl restart odoo
-    sleep 5
-    
-    if systemctl is-active --quiet odoo; then
-        log "SUCCESS" "Odoo Enterprise installation completed successfully"
-        log "INFO" "Enterprise modules are now available in Odoo"
+    if systemctl is-active --quiet odoo 2>/dev/null; then
+        log "INFO" "Restarting Odoo to load Enterprise modules..."
+        systemctl restart odoo
+        sleep 5
+        
+        if systemctl is-active --quiet odoo; then
+            log "SUCCESS" "Odoo Enterprise installation completed successfully"
+            log "INFO" "Enterprise modules are now available in Odoo"
+        else
+            log "ERROR" "Odoo failed to start after Enterprise installation"
+            log "INFO" "Check logs: sudo journalctl -u odoo -f"
+            return 1
+        fi
+    else
+        log "WARN" "Odoo service is not running - skipping restart"
+        log "INFO" "Enterprise modules will be available after starting Odoo"
+    fi
         return 0
     else
         log "ERROR" "Odoo failed to start after Enterprise installation"
@@ -1368,6 +1403,11 @@ main() {
     if ! run_cron_setup; then
         log "ERROR" "Cron setup failed"
         exit 1
+    fi
+    
+    # Install Enterprise edition if requested
+    if ! install_enterprise; then
+        log "WARN" "Enterprise installation failed - continuing without Enterprise edition"
     fi
     
     # Run Nginx setup if configured
