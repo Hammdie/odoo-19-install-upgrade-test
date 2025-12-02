@@ -18,6 +18,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # GitHub repository for Odoo
 ODOO_REPO="https://github.com/odoo/odoo.git"
 
+# Database connection defaults
+DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-5432}"
+DB_USER="${DB_USER:-$ODOO_USER}"
+
 # Ensure apt runs non-interactively when invoked
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 

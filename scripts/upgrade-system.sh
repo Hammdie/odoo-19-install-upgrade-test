@@ -11,6 +11,15 @@ LOG_FILE="$LOG_DIR/upgrade-system-$(date +%Y%m%d-%H%M%S).log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Ensure apt runs non-interactively
+export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
+
+# Pip options (Ubuntu/Debian enforce Externally Managed Env)
+declare -a PIP_INSTALL_ARGS
+if python3 -m pip --help 2>&1 | grep -q -- "--break-system-packages"; then
+    PIP_INSTALL_ARGS+=("--break-system-packages")
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -177,18 +186,18 @@ install_python_deps() {
     log "INFO" "Installing Python dependencies..."
     
     # Upgrade pip
-    python3 -m pip install --upgrade pip 2>&1 | tee -a "$LOG_FILE"
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --upgrade pip 2>&1 | tee -a "$LOG_FILE"
     
     # Install wheel and setuptools
-    python3 -m pip install wheel setuptools 2>&1 | tee -a "$LOG_FILE"
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" wheel setuptools 2>&1 | tee -a "$LOG_FILE"
     
     # Install requirements if available
     if [[ -f "$PROJECT_ROOT/config/requirements.txt" ]]; then
         log "INFO" "Installing Python requirements from config/requirements.txt..."
-        python3 -m pip install -r "$PROJECT_ROOT/config/requirements.txt" 2>&1 | tee -a "$LOG_FILE"
+        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -r "$PROJECT_ROOT/config/requirements.txt" 2>&1 | tee -a "$LOG_FILE"
     else
         log "WARN" "requirements.txt not found, installing basic Odoo dependencies..."
-        python3 -m pip install psycopg2-binary 2>&1 | tee -a "$LOG_FILE"
+        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" psycopg2-binary 2>&1 | tee -a "$LOG_FILE"
     fi
 }
 
