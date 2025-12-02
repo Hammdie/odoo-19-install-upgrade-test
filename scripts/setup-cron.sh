@@ -11,6 +11,10 @@ LOG_FILE="$LOG_DIR/setup-cron-$(date +%Y%m%d-%H%M%S).log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CRON_CONFIG="$PROJECT_ROOT/config/crontab"
+ODOO_HOME="/opt/odoo"
+ODOO_DIR="$ODOO_HOME/odoo"
+ODOO_USER="odoo"
+ODOO_AVAILABLE=true
 
 # Colors for output
 RED='\033[0;31m'
@@ -63,11 +67,16 @@ check_root() {
 # Check prerequisites
 check_prerequisites() {
     log "INFO" "Checking prerequisites..."
-    
+
+    # Check if Odoo user exists
+    if ! id "$ODOO_USER" &>/dev/null; then
+        log "WARN" "Odoo system user '$ODOO_USER' not found. Continuing so cron setup can be prepared before reinstall."
+    fi
+
     # Check if Odoo is installed
-    if [[ ! -d "/opt/odoo/odoo" ]]; then
-        log "ERROR" "Odoo installation not found. Please run install-odoo19.sh first."
-        exit 1
+    if [[ ! -d "$ODOO_DIR" ]]; then
+        log "WARN" "Odoo installation not found at $ODOO_DIR. Cron jobs will be installed but runtime tests will be skipped."
+        ODOO_AVAILABLE=false
     fi
     
     # Check if required scripts exist
@@ -249,15 +258,19 @@ verify_cron_service() {
 # Test cron jobs
 test_cron_jobs() {
     log "INFO" "Testing cron job execution..."
-    
-    # Test if backup script works
-    if [[ -f "$SCRIPT_DIR/backup-odoo.sh" ]]; then
-        log "INFO" "Testing backup script..."
-        if sudo -u odoo "$SCRIPT_DIR/backup-odoo.sh" --test 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "Backup script test passed"
-        else
-            log "WARN" "Backup script test failed"
+
+    if [[ "$ODOO_AVAILABLE" == true ]]; then
+        # Test if backup script works
+        if [[ -f "$SCRIPT_DIR/backup-odoo.sh" ]]; then
+            log "INFO" "Testing backup script..."
+            if sudo -u "$ODOO_USER" "$SCRIPT_DIR/backup-odoo.sh" --test 2>&1 | tee -a "$LOG_FILE"; then
+                log "SUCCESS" "Backup script test passed"
+            else
+                log "WARN" "Backup script test failed"
+            fi
         fi
+    else
+        log "INFO" "Skipping backup script test because Odoo installation is not yet available."
     fi
     
     # Test monitoring script
