@@ -134,6 +134,43 @@ sudo ./install.sh --auto --enterprise
 sudo ./scripts/install-enterprise.sh
 ```
 
+**SSH-Schlüssel für Odoo-Benutzer erstellen (vor Enterprise-Installation):**
+```bash
+# 1. SSH-Verzeichnis für odoo-Benutzer erstellen
+sudo -u odoo mkdir -p /var/lib/odoo/.ssh
+sudo -u odoo chmod 700 /var/lib/odoo/.ssh
+
+# 2. SSH-Schlüssel generieren (ED25519 - moderner und sicherer)
+sudo -u odoo ssh-keygen -t ed25519 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_ed25519 -N ""
+
+# ODER klassischer RSA-Schlüssel (falls ED25519 nicht unterstützt wird)
+sudo -u odoo ssh-keygen -t rsa -b 4096 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_rsa -N ""
+
+# 3. Öffentlichen Schlüssel anzeigen (zum Kopieren)
+sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
+# ODER bei RSA:
+sudo -u odoo cat /var/lib/odoo/.ssh/id_rsa.pub
+
+# 4. Schlüssel zu GitHub hinzufügen:
+#    - Gehe zu: https://github.com/settings/keys
+#    - Klicke "New SSH key"
+#    - Title: "Odoo Server - $(hostname)"
+#    - Key: Füge den öffentlichen Schlüssel ein (ssh-ed25519 AAAA... oder ssh-rsa AAAA...)
+#    - Klicke "Add SSH key"
+
+# 5. SSH-Verbindung zu GitHub testen
+sudo -u odoo ssh -T git@github.com
+# Erwartete Ausgabe: "Hi <username>! You've successfully authenticated, but GitHub does not provide shell access."
+
+# 6. Jetzt Enterprise installieren
+sudo ./scripts/install-enterprise.sh
+```
+
+**Hinweis zu SSH-Schlüssel-Typen:**
+- **ED25519** (empfohlen): Moderner, sicherer, kleiner - wird von GitHub seit 2020 empfohlen
+- **RSA 4096-bit**: Klassische Alternative, falls ED25519 nicht verfügbar ist
+- Die Scripts unterstützen beide Typen automatisch
+
 **Manuelle Installation (für Experten):**
 ```bash
 cd /opt/odoo
@@ -152,12 +189,28 @@ sudo systemctl restart odoo
 **Voraussetzungen für Enterprise Edition:**
 - **Odoo Partner Zugang:** Gültiger Odoo Enterprise Vertrag erforderlich
 - **SSH-Schlüssel für GitHub:** Zugriff auf `git@github.com:odoo/enterprise.git`
+  
+  **SSH-Schlüssel Schritt-für-Schritt:**
   ```bash
-  # SSH-Schlüssel für odoo-Benutzer einrichten
-  sudo -u odoo ssh-keygen -t ed25519 -C "odoo@yourserver.com"
+  # Schritt 1: SSH-Schlüssel für odoo-Benutzer generieren
+  sudo -u odoo ssh-keygen -t ed25519 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_ed25519 -N ""
+  
+  # Schritt 2: Öffentlichen Schlüssel anzeigen und kopieren
   sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
-  # Öffentlichen Schlüssel in GitHub Account hinterlegen
+  
+  # Schritt 3: Zu GitHub hinzufügen unter: https://github.com/settings/keys
+  
+  # Schritt 4: Verbindung testen
+  sudo -u odoo ssh -T git@github.com
+  # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated..."
   ```
+  
+  **Alternative mit RSA-Schlüssel (falls ED25519 nicht verfügbar):**
+  ```bash
+  sudo -u odoo ssh-keygen -t rsa -b 4096 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_rsa -N ""
+  sudo -u odoo cat /var/lib/odoo/.ssh/id_rsa.pub
+  ```
+
 - **GitHub SSH-Verbindung testen:**
   ```bash
   sudo -u odoo ssh -T git@github.com
