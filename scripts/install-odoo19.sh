@@ -135,6 +135,36 @@ download_odoo() {
     log "SUCCESS" "Odoo $ODOO_VERSION downloaded successfully"
 }
 
+# Remove previously installed dependencies to ensure a clean reinstall
+purge_odoo_dependencies() {
+    log "INFO" "Removing previously installed Odoo Python dependencies..."
+
+    if python3 -m pip show odoo &>/dev/null; then
+        python3 -m pip uninstall -y odoo 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+
+    local requirements_file="$ODOO_HOME/odoo/requirements.txt"
+    if [[ -f "$requirements_file" ]]; then
+        python3 -m pip uninstall -y -r "$requirements_file" 2>&1 | tee -a "$LOG_FILE" || {
+            log "WARN" "Some requirements could not be removed (may not have been installed)"
+        }
+    fi
+
+    local extra_packages=(
+        "psycopg2-binary"
+        "python-ldap"
+        "qrcode"
+        "vobject"
+        "werkzeug"
+    )
+
+    for pkg in "${extra_packages[@]}"; do
+        python3 -m pip uninstall -y "$pkg" 2>&1 | tee -a "$LOG_FILE" || true
+    done
+
+    log "SUCCESS" "Previous Odoo dependencies removed"
+}
+
 # Install Odoo Python dependencies
 install_odoo_dependencies() {
     log "INFO" "Installing Odoo Python dependencies..."
@@ -442,6 +472,7 @@ main() {
     check_prerequisites
     stop_odoo_service
     download_odoo
+    purge_odoo_dependencies
     install_odoo_dependencies
     install_odoo_package
     create_odoo_config
