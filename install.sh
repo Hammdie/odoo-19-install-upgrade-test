@@ -324,7 +324,7 @@ show_interactive_menu() {
     while true; do
         echo
         echo -e "${BLUE}${BOLD}╔════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}${BOLD}║        Odoo 19.0 Installation - Interactive Menu         ║${NC}"
+        echo -e "${BLUE}${BOLD}║        Odoo 19.0 Installation - Interactive Menu           ║${NC}"
         echo -e "${BLUE}${BOLD}╚════════════════════════════════════════════════════════════╝${NC}"
         echo
         echo -e "${GREEN}Please select an option:${NC}"
@@ -938,6 +938,18 @@ EOF
 handle_existing_installation() {
     if [[ "$EXISTING_ODOO_FOUND" != true ]]; then
         return 0
+    fi
+    
+    # Skip this prompt if user already made selection in interactive menu
+    # (Menu sets SKIP flags or SETUP flags)
+    if [[ "$AUTO_MODE" != true ]]; then
+        # If any skip/setup flag is set, user already chose from menu - skip this prompt
+        if [[ "$SKIP_SYSTEM_UPDATE" == true ]] || [[ "$SKIP_ODOO_INSTALL" == true ]] || \
+           [[ "$SKIP_CRON_SETUP" == true ]] || [[ "$SKIP_NGINX_SETUP" == true ]] || \
+           [[ "$SETUP_NGINX" == true ]] || [[ "$INSTALL_ENTERPRISE" == true ]]; then
+            log "INFO" "Using menu selection - skipping existing installation prompt"
+            return 0
+        fi
     fi
     
     log "INFO" "Handling existing Odoo installation..."
@@ -1683,11 +1695,12 @@ main() {
     # Detection phase
     detect_existing_odoo
     
-    # Handle existing installation
-    handle_existing_installation
-    
-    # Show interactive menu (only in interactive mode)
+    # Show interactive menu FIRST (only in interactive mode)
+    # This allows user to choose what to do before handling existing installation
     show_interactive_menu
+    
+    # Handle existing installation based on menu selection
+    handle_existing_installation
     
     # Show installation plan (after menu selection)
     show_installation_plan
