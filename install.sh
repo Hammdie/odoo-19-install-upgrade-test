@@ -1018,8 +1018,14 @@ install_enterprise() {
         if grep -q "addons_path.*$ENTERPRISE_PATH" "$odoo_config"; then
             log "INFO" "Enterprise path already in addons_path"
         else
-            # Add enterprise to addons_path
-            sed -i "s|addons_path = \(.*\)|addons_path = $ENTERPRISE_PATH,\1|" "$odoo_config"
+            # Get current addons_path
+            local current_addons=$(grep "^addons_path" "$odoo_config" | cut -d'=' -f2- | tr -d ' ')
+            
+            # Build new addons_path with enterprise first (highest priority), then existing paths
+            local new_addons="$ENTERPRISE_PATH,$current_addons"
+            
+            # Update configuration
+            sed -i "s|^addons_path.*|addons_path = $new_addons|" "$odoo_config"
             log "SUCCESS" "Enterprise path added to addons_path"
         fi
     else

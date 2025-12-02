@@ -10,7 +10,7 @@ db_password = change_me_db_password
 db_name = False
 
 # Addons path
-addons_path = /opt/odoo/addons,/opt/odoo/custom-addons
+addons_path = /opt/odoo/addons,/opt/odoo/enterprise,/opt/odoo/custom-addons,/var/custom-addons
 
 # Server settings
 xmlrpc_port = 8069

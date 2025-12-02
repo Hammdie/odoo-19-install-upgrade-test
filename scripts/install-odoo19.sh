@@ -137,6 +137,15 @@ download_odoo() {
     cd "$ODOO_HOME"
     sudo -u "$ODOO_USER" git clone --depth 1 --branch "$ODOO_VERSION" "$ODOO_REPO" odoo 2>&1 | tee -a "$LOG_FILE"
     
+    # Create custom addons directories
+    log "INFO" "Creating custom addons directories..."
+    mkdir -p "$ODOO_HOME/custom-addons"
+    mkdir -p "/var/custom-addons"
+    chown -R "$ODOO_USER:$ODOO_USER" "$ODOO_HOME/custom-addons"
+    chown -R "$ODOO_USER:$ODOO_USER" "/var/custom-addons"
+    chmod -R 755 "$ODOO_HOME/custom-addons"
+    chmod -R 755 "/var/custom-addons"
+    
     # Set permissions
     chown -R "$ODOO_USER:$ODOO_USER" "$ODOO_HOME/odoo"
     
@@ -320,19 +329,51 @@ create_odoo_config() {
     # Create config directory
     mkdir -p "/etc/odoo"
     
+    # Ask for admin password
+    local admin_password=""
+    if [[ -t 0 ]] && [[ "${DEBIAN_FRONTEND}" != "noninteractive" ]]; then
+        # Interactive mode - ask for password
+        log "INFO" "Please set the Odoo master/admin password"
+        log "INFO" "This password is used for database management operations"
+        echo
+        while true; do
+            read -s -p "Enter Odoo admin password: " admin_password
+            echo
+            if [[ ${#admin_password} -lt 8 ]]; then
+                log "WARN" "Password must be at least 8 characters long"
+                continue
+            fi
+            read -s -p "Confirm Odoo admin password: " admin_password_confirm
+            echo
+            if [[ "$admin_password" == "$admin_password_confirm" ]]; then
+                log "SUCCESS" "Admin password set"
+                break
+            else
+                log "WARN" "Passwords do not match. Please try again."
+            fi
+        done
+    else
+        # Non-interactive mode - generate random password
+        admin_password=$(openssl rand -base64 32)
+        log "WARN" "Non-interactive mode: Generated random admin password"
+        log "WARN" "Admin password saved in $ODOO_CONFIG"
+    fi
+    
     # Copy example config or create new one
     if [[ -f "$PROJECT_ROOT/config/odoo.conf.example" ]]; then
         cp "$PROJECT_ROOT/config/odoo.conf.example" "$ODOO_CONFIG"
+        # Replace placeholder password with actual password
+        sed -i "s/change_me_admin_password/$admin_password/" "$ODOO_CONFIG"
         log "INFO" "Copied configuration from project template"
     else
         # Create basic configuration
         cat > "$ODOO_CONFIG" << EOF
 [options]
-admin_passwd = $(openssl rand -base64 32)
+admin_passwd = $admin_password
 db_host = localhost
 db_port = 5432
 db_user = $ODOO_USER
-addons_path = $ODOO_HOME/odoo/addons,$ODOO_HOME/custom-addons
+addons_path = $ODOO_HOME/odoo/addons,$ODOO_HOME/enterprise,$ODOO_HOME/custom-addons,/var/custom-addons
 xmlrpc_port = 8069
 logfile = /var/log/odoo/odoo.log
 log_level = info

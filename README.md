@@ -162,22 +162,70 @@ sudo -u odoo git clone git@github.com:odoo/enterprise.git --depth 1 --branch 19.
 sudo nano /etc/odoo/odoo.conf
 
 # addons_path sollte enthalten:
-# addons_path = /opt/odoo/addons,/opt/odoo/enterprise
+# addons_path = /opt/odoo/enterprise,/opt/odoo/addons,/opt/odoo/custom-addons,/var/custom-addons
 
 # Odoo neustarten nach Änderungen
 sudo systemctl restart odoo
 ```
 
+### Custom Addons Verzeichnisse
+
+Das Repository erstellt automatisch **zwei Verzeichnisse** für eigene Custom Addons:
+
+**1. Projekt-spezifische Custom Addons:** `/opt/odoo/custom-addons`
+- Für Addons, die zum Odoo-Projekt gehören
+- Werden mit dem odoo-Benutzer verwaltet
+- Ideal für versionskontrollierte Module
+
+**2. System-weite Custom Addons:** `/var/custom-addons`
+- Für externe oder unabhängige Custom Addons
+- Gemeinsam genutzt über mehrere Odoo-Instanzen (falls vorhanden)
+- Ideal für gekaufte oder externe Module
+
+**Custom Addon hinzufügen:**
+```bash
+# Addon nach /var/custom-addons kopieren
+sudo cp -r /pfad/zu/deinem/custom_module /var/custom-addons/
+
+# Berechtigungen setzen
+sudo chown -R odoo:odoo /var/custom-addons/custom_module
+sudo chmod -R 755 /var/custom-addons/custom_module
+
+# Odoo neustarten
+sudo systemctl restart odoo
+
+# Im Odoo Web-Interface:
+# 1. Apps Menü öffnen
+# 2. "Apps aktualisieren" klicken
+# 3. Nach "custom_module" suchen und installieren
+```
+
+**Addons-Pfad Priorität (von links nach rechts):**
+1. `/opt/odoo/enterprise` - Enterprise Edition (höchste Priorität)
+2. `/opt/odoo/addons` - Odoo Core Module
+3. `/opt/odoo/custom-addons` - Projekt-spezifische Custom Addons
+4. `/var/custom-addons` - System-weite Custom Addons
+
+**Hinweis:** Module in Verzeichnissen mit höherer Priorität überschreiben Module mit gleichem Namen in nachfolgenden Verzeichnissen.
+
 ### Was passiert bei der Installation?
 
 1. **System-Vorbereitung** – Updates, PostgreSQL, Node.js, Python-Dependencies
 2. **Odoo 19.0 Download** – Klont das offizielle Odoo-Repository
-3. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0, passlib, etc.)
-4. **Datenbank-Setup** – Erstellt PostgreSQL-Benutzer und konfiguriert Authentifizierung
-5. **Systemd-Service** – Erstellt und aktiviert den Odoo-Dienst (Type=simple für Odoo 19.0)
-6. **Cron-Jobs** – Richtet automatische Wartung und Updates ein
-7. **Firewall** – Konfiguriert UFW für Ports 8069, 80, 443
-8. **Nginx + SSL** (optional) – Reverse Proxy mit Let's Encrypt Zertifikat
+3. **Custom Addons Verzeichnisse** – Erstellt `/opt/odoo/custom-addons` und `/var/custom-addons`
+4. **Admin-Passwort Abfrage** – Interaktive Eingabe des Odoo Master-Passworts (min. 8 Zeichen)
+5. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0, passlib, etc.)
+6. **Datenbank-Setup** – Erstellt PostgreSQL-Benutzer und konfiguriert Authentifizierung
+7. **Systemd-Service** – Erstellt und aktiviert den Odoo-Dienst (Type=simple für Odoo 19.0)
+8. **Cron-Jobs** – Richtet automatische Wartung und Updates ein
+9. **Firewall** – Konfiguriert UFW für Ports 8069, 80, 443
+10. **Nginx + SSL** (optional) – Reverse Proxy mit Let's Encrypt Zertifikat
+11. **Enterprise Edition** (optional) – Klont Enterprise-Addons nach `/opt/odoo/enterprise`
+
+**Hinweis zur Passwort-Abfrage:**
+- Im **interaktiven Modus**: Sie werden nach dem Odoo Master-Passwort gefragt
+- Im **automatischen Modus** (`--auto`): Es wird ein zufälliges Passwort generiert und in `/etc/odoo/odoo.conf` gespeichert
+- Das Master-Passwort wird für Datenbankverwaltungsoperationen benötigt
 
 ### Manuelle Installation
 
@@ -246,7 +294,7 @@ sudo ./scripts/setup-cron.sh
 ### Konfiguration
 
 #### Odoo-Konfiguration
-Bearbeiten Sie `config/odoo.conf` entsprechend Ihrer Umgebung:
+Bearbeiten Sie `/etc/odoo/odoo.conf` entsprechend Ihrer Umgebung:
 
 ```ini
 [options]
@@ -255,9 +303,17 @@ db_host = localhost
 db_port = 5432
 db_user = odoo
 db_password = your_db_password
-addons_path = /opt/odoo/addons
+
+# Addons-Pfad (automatisch konfiguriert bei Installation)
+# Enterprise (falls installiert), Core, Custom Addons
+addons_path = /opt/odoo/enterprise,/opt/odoo/addons,/opt/odoo/custom-addons,/var/custom-addons
+
 logfile = /var/log/odoo/odoo.log
+workers = 4
+max_cron_threads = 2
 ```
+
+**Wichtig:** Die Reihenfolge in `addons_path` ist entscheidend! Module weiter links haben Vorrang bei Namenskonflikten.
 
 #### Cron-Konfiguration
 Die Cron-Jobs werden in `config/crontab` definiert:
@@ -537,10 +593,22 @@ export ODOO_UPGRADE_DEBUG=1
 
 4. **Odoo Admin-Passwort ändern:**
    ```bash
+   # Master-Passwort in Konfiguration ändern
    sudo nano /etc/odoo/odoo.conf
-   # Ändere admin_passwd = <starkes-passwort>
+   # Ändere die Zeile: admin_passwd = <neues-starkes-passwort>
    sudo systemctl restart odoo
    ```
+   
+   **Wichtig:** Das `admin_passwd` ist das **Master-Passwort** für:
+   - Datenbank-Management (Erstellen, Löschen, Backup, Restore)
+   - Server-weite Einstellungen
+   - Modul-Installation und Updates
+   
+   **Best Practices:**
+   - Mindestens 16 Zeichen lang
+   - Kombination aus Buchstaben, Zahlen und Sonderzeichen
+   - Nicht das gleiche wie andere Passwörter
+   - Regelmäßig ändern (z.B. alle 90 Tage)
 
 5. **Regelmäßige Updates:**
    ```bash
@@ -621,8 +689,11 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 
 ### Version 1.2.0 (2025-12-02)
 - **Vollautomatische Installation:** `--auto` Flag für promptfreie Installation
+- **Interaktive Admin-Passwort Abfrage:** Sichere Eingabe des Odoo Master-Passworts während Installation
 - **Nginx Reverse Proxy Integration:** `--nginx-domain` und `--nginx-email` Flags für automatisches SSL/TLS Setup
 - **Odoo Enterprise Edition Support:** `--enterprise` Flag für automatische Installation der Enterprise-Addons
+- **Custom Addons Verzeichnisse:** Automatische Erstellung von `/opt/odoo/custom-addons` und `/var/custom-addons`
+- **Erweiterte Addons-Pfad Konfiguration:** Unterstützung für Enterprise, Core, Custom Addons mit Prioritätsreihenfolge
 - **Odoo 19.0 Systemd-Anpassung:** `Type=simple` statt `Type=forking` (--daemon entfernt)
 - **Ubuntu 24.04 Kompatibilität:** Automatische Erkennung und Verwendung von `--break-system-packages` für pip
 - **lxml Kompatibilität:** Erzwingt lxml < 5.0 (behebt `AttributeError: module 'lxml.html.clean' has no attribute 'defs'`)
