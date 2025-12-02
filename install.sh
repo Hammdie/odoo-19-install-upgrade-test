@@ -442,27 +442,58 @@ show_interactive_menu() {
                 echo -e "  1. System Upgrade"
                 echo -e "  2. Odoo Installation"
                 echo -e "  3. Cron Setup"
-                echo
-                read -p "Do you want to include Nginx + SSL? (y/N): " -n 1 -r
+                echo -e "  4. Nginx + SSL Setup (optional)"
+                echo -e "  5. Enterprise Edition (optional)"
                 echo
                 
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    read -p "Enter domain name: " NGINX_DOMAIN
-                    read -p "Enter email for Let's Encrypt: " NGINX_EMAIL
+                # Ask for Nginx/SSL setup
+                read -p "Setup Nginx reverse proxy with SSL/TLS? (Y/n): " -n 1 -r
+                echo
+                
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    echo
+                    echo -e "${BLUE}Nginx + SSL Configuration${NC}"
+                    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
                     
-                    if [[ -n "$NGINX_DOMAIN" ]] && [[ -n "$NGINX_EMAIL" ]]; then
-                        SETUP_NGINX=true
-                    fi
+                    # Domain input with validation
+                    while true; do
+                        read -p "$(echo -e ${GREEN}Enter domain name${NC}) (e.g., odoo.example.com): " NGINX_DOMAIN
+                        if [[ -n "$NGINX_DOMAIN" ]]; then
+                            if [[ $NGINX_DOMAIN =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.([a-zA-Z]{2,})$ ]]; then
+                                break
+                            else
+                                echo -e "${RED}Invalid domain format. Please try again.${NC}"
+                            fi
+                        else
+                            echo -e "${RED}Domain is required.${NC}"
+                        fi
+                    done
+                    
+                    # Email input with default
+                    read -p "$(echo -e ${GREEN}Let\'s Encrypt email${NC}) (default: admin@${NGINX_DOMAIN}): " NGINX_EMAIL
+                    NGINX_EMAIL="${NGINX_EMAIL:-admin@${NGINX_DOMAIN}}"
+                    
+                    SETUP_NGINX=true
+                    
+                    echo
+                    echo -e "${GREEN}✓${NC} Nginx will be configured for: ${GREEN}$NGINX_DOMAIN${NC}"
+                    echo -e "${GREEN}✓${NC} SSL certificate email: ${GREEN}$NGINX_EMAIL${NC}"
+                else
+                    SETUP_NGINX=false
                 fi
                 
                 echo
-                read -p "Do you want to install Enterprise edition? (y/N): " -n 1 -r
+                read -p "Install Odoo Enterprise edition? (y/N): " -n 1 -r
                 echo
                 
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     INSTALL_ENTERPRISE=true
+                    echo -e "${GREEN}✓${NC} Enterprise edition will be installed"
+                else
+                    INSTALL_ENTERPRISE=false
                 fi
                 
+                echo
                 return 0
                 ;;
             7)
@@ -1485,6 +1516,37 @@ run_nginx_setup() {
     
     log "INFO" "Setting up Nginx reverse proxy with SSL/TLS..."
     
+    # Check if Apache is installed and remove it (conflicts with Nginx)
+    if command -v apache2 &> /dev/null || systemctl list-units --full -all | grep -q apache2.service; then
+        log "WARN" "Apache2 detected - removing to avoid port conflicts with Nginx..."
+        systemctl stop apache2 2>/dev/null || true
+        systemctl disable apache2 2>/dev/null || true
+        apt-get remove -y apache2 apache2-utils apache2-bin apache2.2-common 2>/dev/null || true
+        apt-get purge -y apache2 apache2-utils apache2-bin apache2.2-common 2>/dev/null || true
+        apt-get autoremove -y 2>/dev/null || true
+        log "SUCCESS" "Apache2 removed"
+    fi
+    
+    # Check if Nginx is installed, install if missing
+    if ! command -v nginx &> /dev/null; then
+        log "WARN" "Nginx not found - installing Nginx..."
+        if apt-get update -qq && apt-get install -y nginx; then
+            log "SUCCESS" "Nginx installed successfully"
+            systemctl enable nginx
+            systemctl start nginx
+        else
+            log "ERROR" "Failed to install Nginx"
+            return 1
+        fi
+    else
+        log "INFO" "Nginx is already installed"
+        # Ensure Nginx is running
+        if ! systemctl is-active --quiet nginx; then
+            log "INFO" "Starting Nginx..."
+            systemctl start nginx
+        fi
+    fi
+    
     local nginx_script="$PROJECT_ROOT/scripts/setup-odoo-nginx.sh"
     
     if [[ ! -f "$nginx_script" ]]; then
@@ -1660,7 +1722,7 @@ handle_error() {
     exit $exit_code
 }
 
-# Main execution
+ja, beides# Main execution
 main() {
     # Set error handler
     trap 'handle_error $LINENO' ERR
