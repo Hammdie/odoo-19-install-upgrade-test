@@ -102,15 +102,34 @@ check_prerequisites() {
     # Prüfe ob root
     is_root
     
-    # Prüfe ob Nginx installiert ist
-    if ! command -v nginx >/dev/null 2>&1; then
-        log_error "Nginx ist nicht installiert"
-        log_info "Installation: sudo apt-get update && sudo apt-get install -y nginx"
-        exit 1
+    # Check if Apache is installed and remove it (conflicts with Nginx)
+    if command -v apache2 >/dev/null 2>&1 || systemctl list-units --full -all 2>/dev/null | grep -q apache2.service; then
+        log_warn "Apache2 erkannt - wird entfernt (Port-Konflikt mit Nginx)..."
+        systemctl stop apache2 2>/dev/null || true
+        systemctl disable apache2 2>/dev/null || true
+        apt-get remove -y apache2 apache2-utils apache2-bin apache2.2-common 2>/dev/null || true
+        apt-get purge -y apache2 apache2-utils apache2-bin apache2.2-common 2>/dev/null || true
+        apt-get autoremove -y 2>/dev/null || true
+        log_success "Apache2 entfernt"
     fi
-    log_success "Nginx gefunden"
     
-    # Prüfe ob Nginx läuft
+    # Prüfe ob Nginx installiert ist, installiere falls nötig
+    if ! command -v nginx >/dev/null 2>&1; then
+        log_warn "Nginx nicht gefunden - installiere Nginx..."
+        if apt-get update -qq && apt-get install -y nginx; then
+            log_success "Nginx erfolgreich installiert"
+            systemctl enable nginx
+            systemctl start nginx
+            sleep 2
+        else
+            log_error "Nginx-Installation fehlgeschlagen"
+            exit 1
+        fi
+    else
+        log_success "Nginx gefunden"
+    fi
+    
+    # Prüfe ob Nginx läuft, starte falls nötig
     if ! systemctl is-active --quiet nginx; then
         log_warn "Nginx läuft nicht, starte Nginx..."
         systemctl start nginx
