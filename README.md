@@ -72,6 +72,9 @@ sudo ./install.sh
 # Vollautomatisch ohne Prompts
 sudo ./install.sh --auto
 
+# Mit Nginx Reverse Proxy + SSL/TLS (Let's Encrypt)
+sudo ./install.sh --auto --nginx-domain odoo.example.com --nginx-email admin@example.com
+
 # Neuinstallation erzwingen (entfernt bestehende Installation)
 sudo ./install.sh --auto --force
 
@@ -81,19 +84,100 @@ sudo ./install.sh --auto --skip-system
 # Nur Cron-Setup überspringen
 sudo ./install.sh --auto --skip-cron
 
+# Nginx-Setup überspringen
+sudo ./install.sh --auto --skip-nginx
+
 # Hilfe anzeigen
 ./install.sh --help
+```
+
+### Nginx Reverse Proxy + SSL/TLS
+
+Das Repository enthält ein vollautomatisches Nginx-Setup-Script für Produktionsumgebungen:
+
+**Während der Installation:**
+```bash
+sudo ./install.sh --auto --nginx-domain odoo.example.com --nginx-email admin@example.com
+```
+
+**Nach der Installation:**
+```bash
+sudo ./scripts/setup-odoo-nginx.sh odoo.example.com admin@example.com
+```
+
+**Features:**
+- ✅ Nginx Reverse Proxy für Odoo (Port 8069)
+- ✅ WebSocket-Unterstützung für Longpolling (Port 8072)
+- ✅ Let's Encrypt SSL/TLS Zertifikat
+- ✅ Automatische monatliche Zertifikat-Erneuerung
+- ✅ HTTP zu HTTPS Weiterleitung
+- ✅ Automatisches Backup der Nginx-Konfiguration
+
+**Voraussetzungen für Nginx + SSL:**
+- Domain muss auf Server-IP zeigen (DNS A-Record)
+- Port 80 und 443 müssen erreichbar sein
+- Gültige E-Mail-Adresse für Let's Encrypt
+
+### Odoo Enterprise Edition
+
+Das Repository unterstützt die optionale Installation der **Odoo Enterprise Edition**:
+
+**Während der Installation:**
+```bash
+sudo ./install.sh --auto --enterprise
+```
+
+**Nach der Installation:**
+```bash
+# Enterprise-Addons werden automatisch in wöchentlichen Updates aktualisiert
+# Manuelle Installation:
+cd /opt/odoo
+sudo -u odoo git clone git@github.com:odoo/enterprise.git --depth 1 --branch 19.0
+```
+
+**Features:**
+- ✅ Automatischer Clone von `git@github.com:odoo/enterprise.git` (Branch 19.0)
+- ✅ Installation nach `/opt/odoo/enterprise`
+- ✅ Automatische Integration in `addons_path`
+- ✅ Wöchentliche Auto-Updates via Cron (jeden Sonntag 3:00 Uhr)
+
+**Voraussetzungen für Enterprise Edition:**
+- **Odoo Partner Zugang:** Gültiger Odoo Enterprise Vertrag erforderlich
+- **SSH-Schlüssel für GitHub:** Zugriff auf `git@github.com:odoo/enterprise.git`
+  ```bash
+  # SSH-Schlüssel für odoo-Benutzer einrichten
+  sudo -u odoo ssh-keygen -t ed25519 -C "odoo@yourserver.com"
+  sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
+  # Öffentlichen Schlüssel in GitHub Account hinterlegen
+  ```
+- **GitHub SSH-Verbindung testen:**
+  ```bash
+  sudo -u odoo ssh -T git@github.com
+  # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated..."
+  ```
+
+**Manuelle Konfiguration:**
+```bash
+# Enterprise-Addons Path in Odoo-Konfiguration prüfen
+sudo nano /etc/odoo/odoo.conf
+
+# addons_path sollte enthalten:
+# addons_path = /opt/odoo/addons,/opt/odoo/enterprise
+
+# Odoo neustarten nach Änderungen
+sudo systemctl restart odoo
 ```
 
 ### Was passiert bei der Installation?
 
 1. **System-Vorbereitung** – Updates, PostgreSQL, Node.js, Python-Dependencies
 2. **Odoo 19.0 Download** – Klont das offizielle Odoo-Repository
-3. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0)
+3. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0, passlib, etc.)
 4. **Datenbank-Setup** – Erstellt PostgreSQL-Benutzer und konfiguriert Authentifizierung
-5. **Systemd-Service** – Erstellt und aktiviert den Odoo-Dienst
+5. **Systemd-Service** – Erstellt und aktiviert den Odoo-Dienst (Type=simple für Odoo 19.0)
 6. **Cron-Jobs** – Richtet automatische Wartung und Updates ein
 7. **Firewall** – Konfiguriert UFW für Ports 8069, 80, 443
+8. **Nginx + SSL** (optional) – Reverse Proxy mit Let's Encrypt Zertifikat
 
 ### Manuelle Installation
 
@@ -190,10 +274,11 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 
 | Script | Beschreibung | Version |
 |--------|-------------|---------|
-| `install.sh` | Hauptinstallationsscript mit Erkennung vorhandener Installationen | 1.1.0 |
-| `scripts/upgrade-system.sh` | System-Pakete aktualisieren | 1.0.0 |
-| `scripts/install-odoo19.sh` | Odoo 19.0 Installation | 1.0.0 |
-| `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.0.0 |
+| `install.sh` | Hauptinstallationsscript mit Erkennung vorhandener Installationen | 1.2.0 |
+| `scripts/upgrade-system.sh` | System-Pakete aktualisieren | 1.2.0 |
+| `scripts/install-odoo19.sh` | Odoo 19.0 Installation | 1.2.0 |
+| `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.1.0 |
+| `scripts/setup-odoo-nginx.sh` | **Nginx Reverse Proxy + SSL/TLS Setup** | **1.2.0** |
 | `scripts/backup-odoo.sh` | Odoo-Datenbank Backup | 1.0.0 |
 | `scripts/restore-odoo.sh` | Odoo-Datenbank Wiederherstellung | 1.0.0 |
 | `scripts/daily-maintenance.sh` | Tägliche Wartungsaufgaben | 1.0.0 |
@@ -426,20 +511,42 @@ export ODOO_UPGRADE_DEBUG=1
 1. **Firewall konfigurieren:**
    ```bash
    sudo ufw enable
-   sudo ufw allow 8069/tcp  # Odoo Port
-   sudo ufw allow ssh
+   sudo ufw allow 22/tcp    # SSH
+   sudo ufw allow 80/tcp    # HTTP
+   sudo ufw allow 443/tcp   # HTTPS
+   # Port 8069 sollte NUR mit Nginx Reverse Proxy geöffnet werden
    ```
 
-2. **SSL/TLS einrichten:**
+2. **SSL/TLS einrichten (automatisch mit Nginx-Script):**
    ```bash
-   # Nginx Reverse Proxy mit Let's Encrypt
-   sudo apt install nginx certbot
+   sudo ./scripts/setup-odoo-nginx.sh odoo.example.com admin@example.com
+   ```
+   
+   **Oder manuell mit Nginx + Certbot:**
+   ```bash
+   sudo apt install nginx certbot python3-certbot-nginx
+   sudo certbot --nginx -d odoo.example.com
    ```
 
 3. **Datenbankzugriff beschränken:**
    ```bash
    # PostgreSQL nur lokal zugänglich machen
    sudo nano /etc/postgresql/*/main/pg_hba.conf
+   # Verwende 'peer' oder 'md5' statt 'trust'
+   ```
+
+4. **Odoo Admin-Passwort ändern:**
+   ```bash
+   sudo nano /etc/odoo/odoo.conf
+   # Ändere admin_passwd = <starkes-passwort>
+   sudo systemctl restart odoo
+   ```
+
+5. **Regelmäßige Updates:**
+   ```bash
+   # Automatisch via Cron (bereits konfiguriert)
+   # Oder manuell:
+   sudo ./scripts/weekly-odoo-update.sh
    ```
 
 ## Entwicklung und Beitrag
@@ -514,12 +621,23 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 
 ### Version 1.2.0 (2025-12-02)
 - **Vollautomatische Installation:** `--auto` Flag für promptfreie Installation
+- **Nginx Reverse Proxy Integration:** `--nginx-domain` und `--nginx-email` Flags für automatisches SSL/TLS Setup
+- **Odoo Enterprise Edition Support:** `--enterprise` Flag für automatische Installation der Enterprise-Addons
+- **Odoo 19.0 Systemd-Anpassung:** `Type=simple` statt `Type=forking` (--daemon entfernt)
 - **Ubuntu 24.04 Kompatibilität:** Automatische Erkennung und Verwendung von `--break-system-packages` für pip
 - **lxml Kompatibilität:** Erzwingt lxml < 5.0 (behebt `AttributeError: module 'lxml.html.clean' has no attribute 'defs'`)
+- **Robuste Dependency-Installation:** Retry-Mechanismus + Verifizierung kritischer Pakete (passlib, lxml, psycopg2, etc.)
 - **Verbesserte DB-Konfiguration:** Fehlende `DB_HOST`, `DB_PORT`, `DB_USER` Variablen werden jetzt korrekt initialisiert
 - **Cron-Setup Flexibilität:** Setup kann jetzt auch vor der Odoo-Installation ausgeführt werden
 - **Distro-Paket-Entfernung:** Automatische Entfernung von System-Odoo-Paketen (`odoo`, `python3-odoo`) vor Installation
 - **Dependency-Purge:** Vollständige Entfernung alter pip-Dependencies vor Neuinstallation
+- **Nginx-Script:** Vollautomatisches Setup mit Let's Encrypt, Longpolling-Support, monatlicher Auto-Renewal
+- **Enterprise Auto-Update:** Wöchentliche automatische Updates der Enterprise-Addons via Cron
+
+### Neue Scripts in Version 1.2.0:
+| Script | Beschreibung |
+|--------|-------------|
+| `scripts/setup-odoo-nginx.sh` | Nginx Reverse Proxy + SSL/TLS Setup mit Let's Encrypt |
 
 ### Version 1.1.0 (2025-11-14)
 - **Verbesserte PostgreSQL-Authentifizierung:** Peer-Authentication für Produktionsumgebungen

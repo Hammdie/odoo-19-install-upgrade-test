@@ -9,6 +9,7 @@ set -e  # Exit on any error
 ODOO_VERSION="19.0"
 ODOO_USER="odoo"
 ODOO_HOME="/opt/odoo"
+ENTERPRISE_PATH="/opt/odoo/enterprise"
 LOG_DIR="/var/log/odoo-upgrade"
 LOG_FILE="$LOG_DIR/weekly-update-$(date +%Y%m%d-%H%M%S).log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -260,6 +261,62 @@ update_odoo_source() {
     fi
 }
 
+# Update Odoo Enterprise edition
+update_enterprise() {
+    # Check if enterprise is installed
+    if [[ ! -d "$ENTERPRISE_PATH/.git" ]]; then
+        log "INFO" "Enterprise edition not installed, skipping"
+        return 0
+    fi
+    
+    log "INFO" "Updating Odoo Enterprise..."
+    
+    cd "$ENTERPRISE_PATH"
+    
+    # Check current version/commit
+    local current_commit=$(git rev-parse HEAD)
+    local current_branch=$(git branch --show-current)
+    
+    log "INFO" "Enterprise current branch: $current_branch"
+    log "INFO" "Enterprise current commit: $current_commit"
+    
+    # Fetch latest changes
+    if sudo -u "$ODOO_USER" git fetch origin 2>&1 | tee -a "$LOG_FILE"; then
+        log "INFO" "Enterprise repository fetched"
+    else
+        log "WARN" "Failed to fetch Enterprise repository (may require SSH access)"
+        return 1
+    fi
+    
+    # Check if updates are available
+    local latest_commit=$(git rev-parse origin/$ODOO_VERSION)
+    
+    if [[ "$current_commit" == "$latest_commit" ]]; then
+        log "INFO" "Enterprise edition is already up to date"
+        return 0
+    fi
+    
+    log "INFO" "Enterprise updates available, updating..."
+    log "INFO" "New commit: $latest_commit"
+    
+    # Stash any local changes
+    sudo -u "$ODOO_USER" git stash 2>&1 | tee -a "$LOG_FILE" || true
+    
+    # Pull latest changes
+    if sudo -u "$ODOO_USER" git pull origin "$ODOO_VERSION" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "Enterprise edition updated successfully"
+        return 0
+    else
+        log "ERROR" "Failed to update Enterprise edition"
+        
+        # Try to recover
+        log "INFO" "Attempting to recover..."
+        sudo -u "$ODOO_USER" git reset --hard "$current_commit" 2>&1 | tee -a "$LOG_FILE"
+        
+        return 1
+    fi
+}
+
 # Update custom addons
 update_custom_addons() {
     if [[ "$UPDATE_ADDONS" != true ]]; then
@@ -470,6 +527,7 @@ main() {
     # Perform updates
     update_system_packages
     update_odoo_source
+    update_enterprise
     update_custom_addons
     check_config_updates
     

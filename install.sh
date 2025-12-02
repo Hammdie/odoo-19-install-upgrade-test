@@ -23,9 +23,15 @@ NC='\033[0m' # No Color
 SKIP_SYSTEM_UPDATE=false
 SKIP_ODOO_INSTALL=false
 SKIP_CRON_SETUP=false
+SKIP_NGINX_SETUP=false
 AUTO_MODE=false
 FORCE_REINSTALL=false
 BACKUP_EXISTING=true
+SETUP_NGINX=false
+NGINX_DOMAIN=""
+NGINX_EMAIL=""
+INSTALL_ENTERPRISE=false
+ENTERPRISE_PATH="/opt/odoo/enterprise"
 
 # Detection results
 EXISTING_ODOO_FOUND=false
@@ -88,6 +94,10 @@ ${BOLD}Options:${NC}
     --skip-system       Skip system upgrade step
     --skip-odoo         Skip Odoo installation step
     --skip-cron         Skip cron setup step
+    --skip-nginx        Skip Nginx reverse proxy setup
+    --nginx-domain      Setup Nginx with SSL for this domain
+    --nginx-email       Email for Let's Encrypt certificate
+    --enterprise        Install Odoo Enterprise edition (requires Odoo partner access)
     --no-backup         Don't backup existing installations
     --help              Show this help message
 
@@ -102,6 +112,8 @@ ${BOLD}Examples:${NC}
     $0 --auto                   # Automatic installation (recommended)
     $0 --force --auto           # Force clean installation
     $0 --skip-system --auto     # Skip system updates, only Odoo
+    $0 --auto --nginx-domain example.com --nginx-email admin@example.com  # With Nginx + SSL
+    $0 --auto --enterprise      # Install with Enterprise edition (requires partner access)
     
 ${BOLD}Existing Installation Handling:${NC}
     The script automatically detects existing Odoo installations and:
@@ -155,6 +167,23 @@ parse_arguments() {
                 ;;
             --skip-cron)
                 SKIP_CRON_SETUP=true
+                shift
+                ;;
+            --skip-nginx)
+                SKIP_NGINX_SETUP=true
+                shift
+                ;;
+            --nginx-domain)
+                SETUP_NGINX=true
+                NGINX_DOMAIN="$2"
+                shift 2
+                ;;
+            --nginx-email)
+                NGINX_EMAIL="$2"
+                shift 2
+                ;;
+            --enterprise)
+                INSTALL_ENTERPRISE=true
                 shift
                 ;;
             --no-backup)
@@ -292,6 +321,18 @@ show_installation_plan() {
         echo -e "${GREEN}✓${NC} Cron Setup: Configure automatic updates and maintenance"
     else
         echo -e "${YELLOW}⚠${NC} Cron Setup: ${YELLOW}SKIPPED${NC}"
+    fi
+    
+    if [[ "$SETUP_NGINX" == true ]] && [[ "$SKIP_NGINX_SETUP" == false ]]; then
+        echo -e "${GREEN}✓${NC} Nginx Reverse Proxy: SSL/TLS setup for $NGINX_DOMAIN"
+    elif [[ "$SKIP_NGINX_SETUP" == true ]]; then
+        echo -e "${YELLOW}⚠${NC} Nginx Setup: ${YELLOW}SKIPPED${NC}"
+    else
+        echo -e "${BLUE}ℹ${NC} Nginx Setup: Not configured (can be added later)"
+    fi
+    
+    if [[ "$INSTALL_ENTERPRISE" == true ]]; then
+        echo -e "${GREEN}✓${NC} Odoo Enterprise: Will be installed to $ENTERPRISE_PATH"
     fi
     
     echo -e "${BLUE}Backup existing: $([ "$BACKUP_EXISTING" == true ] && echo "${GREEN}Yes${NC}" || echo "${YELLOW}No${NC}")${NC}"
@@ -917,6 +958,90 @@ run_odoo_installation() {
     fi
 }
 
+# Install Odoo Enterprise edition
+install_enterprise() {
+    if [[ "$INSTALL_ENTERPRISE" != true ]]; then
+        log "INFO" "Enterprise edition not requested - skipping"
+        return 0
+    fi
+    
+    log "INFO" "Installing Odoo Enterprise edition..."
+    
+    # Check if Git is available
+    if ! command -v git &> /dev/null; then
+        log "ERROR" "Git is not installed. Cannot clone Enterprise repository."
+        return 1
+    fi
+    
+    # Check SSH access to Odoo Enterprise repository
+    log "INFO" "Verifying access to Odoo Enterprise repository..."
+    if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        log "WARN" "SSH key authentication may not be configured for GitHub"
+        log "INFO" "Attempting to clone Enterprise repository..."
+    fi
+    
+    # Create enterprise directory
+    mkdir -p "$ENTERPRISE_PATH"
+    
+    # Backup existing enterprise installation if exists
+    if [[ -d "$ENTERPRISE_PATH/.git" ]]; then
+        log "INFO" "Existing Enterprise installation found - backing up..."
+        mv "$ENTERPRISE_PATH" "$ENTERPRISE_PATH.backup.$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "$ENTERPRISE_PATH"
+    fi
+    
+    # Clone Enterprise repository
+    log "INFO" "Cloning Odoo Enterprise from git@github.com:odoo/enterprise.git (branch 19.0)..."
+    cd "$(dirname "$ENTERPRISE_PATH")"
+    
+    if sudo -u odoo git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$(basename "$ENTERPRISE_PATH")" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "Enterprise repository cloned successfully"
+    else
+        log "ERROR" "Failed to clone Enterprise repository"
+        log "ERROR" "Please ensure:"
+        log "ERROR" "  1. You have valid Odoo Partner access"
+        log "ERROR" "  2. Your SSH key is added to GitHub"
+        log "ERROR" "  3. SSH key has access to odoo/enterprise repository"
+        return 1
+    fi
+    
+    # Set permissions
+    chown -R odoo:odoo "$ENTERPRISE_PATH"
+    chmod -R 755 "$ENTERPRISE_PATH"
+    
+    # Update Odoo configuration to include enterprise addons
+    log "INFO" "Updating Odoo configuration to include Enterprise addons..."
+    local odoo_config="/etc/odoo/odoo.conf"
+    
+    if [[ -f "$odoo_config" ]]; then
+        # Check if enterprise path is already in addons_path
+        if grep -q "addons_path.*$ENTERPRISE_PATH" "$odoo_config"; then
+            log "INFO" "Enterprise path already in addons_path"
+        else
+            # Add enterprise to addons_path
+            sed -i "s|addons_path = \(.*\)|addons_path = $ENTERPRISE_PATH,\1|" "$odoo_config"
+            log "SUCCESS" "Enterprise path added to addons_path"
+        fi
+    else
+        log "WARN" "Odoo configuration file not found at $odoo_config"
+    fi
+    
+    # Restart Odoo to load enterprise modules
+    log "INFO" "Restarting Odoo to load Enterprise modules..."
+    systemctl restart odoo
+    sleep 5
+    
+    if systemctl is-active --quiet odoo; then
+        log "SUCCESS" "Odoo Enterprise installation completed successfully"
+        log "INFO" "Enterprise modules are now available in Odoo"
+        return 0
+    else
+        log "ERROR" "Odoo failed to start after Enterprise installation"
+        log "INFO" "Check logs: sudo journalctl -u odoo -f"
+        return 1
+    fi
+}
+
 # Run cron setup
 run_cron_setup() {
     if [[ "$SKIP_CRON_SETUP" == true ]]; then
@@ -1005,6 +1130,44 @@ verify_installation() {
     fi
 }
 
+# Run Nginx setup
+run_nginx_setup() {
+    if [[ "$SKIP_NGINX_SETUP" == true ]]; then
+        log "INFO" "Nginx setup skipped as requested"
+        return 0
+    fi
+    
+    if [[ "$SETUP_NGINX" != true ]] || [[ -z "$NGINX_DOMAIN" ]]; then
+        log "INFO" "Nginx setup not configured - skipping"
+        return 0
+    fi
+    
+    log "INFO" "Setting up Nginx reverse proxy with SSL/TLS..."
+    
+    local nginx_script="$PROJECT_ROOT/scripts/setup-odoo-nginx.sh"
+    
+    if [[ ! -f "$nginx_script" ]]; then
+        log "ERROR" "Nginx setup script not found: $nginx_script"
+        return 1
+    fi
+    
+    # Make script executable
+    chmod +x "$nginx_script"
+    
+    # Build command with optional email
+    local nginx_cmd="$nginx_script $NGINX_DOMAIN"
+    [[ -n "$NGINX_EMAIL" ]] && nginx_cmd="$nginx_cmd $NGINX_EMAIL"
+    
+    if $nginx_cmd 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "Nginx reverse proxy setup completed successfully"
+        log "INFO" "Odoo is now accessible at: https://$NGINX_DOMAIN"
+        return 0
+    else
+        log "ERROR" "Nginx setup failed"
+        return 1
+    fi
+}
+
 # Display final summary and instructions
 show_final_summary() {
     log "INFO" "========================================"
@@ -1028,8 +1191,16 @@ show_final_summary() {
     echo
     echo -e "${BLUE}${BOLD}Access Information:${NC}"
     echo -e "${BLUE}==================${NC}"
-    echo -e "${GREEN}🌐 Web Interface:${NC} http://localhost:8069"
-    echo -e "${GREEN}🌐 External Access:${NC} http://your-server-ip:8069"
+    
+    if [[ "$SETUP_NGINX" == true ]] && [[ -n "$NGINX_DOMAIN" ]]; then
+        echo -e "${GREEN}🌐 Web Interface (HTTPS):${NC} https://$NGINX_DOMAIN"
+        echo -e "${GREEN}🌐 Direct Access:${NC} http://localhost:8069 (local only)"
+    else
+        echo -e "${GREEN}🌐 Web Interface:${NC} http://localhost:8069"
+        echo -e "${GREEN}🌐 External Access:${NC} http://your-server-ip:8069"
+        echo -e "${YELLOW}💡 Tip:${NC} Set up SSL/TLS with: sudo $PROJECT_ROOT/scripts/setup-odoo-nginx.sh <domain> <email>"
+    fi
+    
     echo -e "${GREEN}📁 Odoo Directory:${NC} /opt/odoo"
     
     # Show actual configuration location
@@ -1061,11 +1232,20 @@ show_final_summary() {
     echo
     echo -e "${BLUE}${BOLD}Next Steps:${NC}"
     echo -e "${BLUE}===========${NC}"
-    echo -e "${YELLOW}1.${NC} Access Odoo at http://your-server-ip:8069"
+    
+    if [[ "$SETUP_NGINX" == true ]] && [[ -n "$NGINX_DOMAIN" ]]; then
+        echo -e "${YELLOW}1.${NC} Access Odoo at https://$NGINX_DOMAIN"
+    else
+        echo -e "${YELLOW}1.${NC} Access Odoo at http://your-server-ip:8069"
+    fi
+    
     echo -e "${YELLOW}2.${NC} Create your first database"
     echo -e "${YELLOW}3.${NC} Configure your Odoo instance"
     echo -e "${YELLOW}4.${NC} Review configuration file: /etc/odoo/odoo.conf"
-    echo -e "${YELLOW}5.${NC} Set up SSL/TLS with nginx (recommended for production)"
+    
+    if [[ "$SETUP_NGINX" != true ]]; then
+        echo -e "${YELLOW}5.${NC} (Optional) Set up SSL/TLS: sudo $PROJECT_ROOT/scripts/setup-odoo-nginx.sh <domain> <email>"
+    fi
     
     # Useful commands
     echo
@@ -1182,6 +1362,11 @@ main() {
     if ! run_cron_setup; then
         log "ERROR" "Cron setup failed"
         exit 1
+    fi
+    
+    # Run Nginx setup if configured
+    if ! run_nginx_setup; then
+        log "WARN" "Nginx setup failed - Odoo is still accessible via HTTP on port 8069"
     fi
     
     # Verify installation
