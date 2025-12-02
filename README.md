@@ -188,6 +188,7 @@ sudo systemctl restart odoo
 
 **Voraussetzungen für Enterprise Edition:**
 - **Odoo Partner Zugang:** Gültiger Odoo Enterprise Vertrag erforderlich
+- **Odoo Enterprise GitHub-Zugriff:** Repository-Zugang muss von Odoo freigeschaltet werden
 - **SSH-Schlüssel für GitHub:** Zugriff auf `git@github.com:odoo/enterprise.git`
   
   **SSH-Schlüssel Schritt-für-Schritt:**
@@ -197,12 +198,35 @@ sudo systemctl restart odoo
   
   # Schritt 2: Öffentlichen Schlüssel anzeigen und kopieren
   sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
+  # Ausgabe: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... odoo@yourserver
   
-  # Schritt 3: Zu GitHub hinzufügen unter: https://github.com/settings/keys
+  # Schritt 3: SSH-Schlüssel zu GitHub-Account hinzufügen
+  # - Gehe zu: https://github.com/settings/keys
+  # - Klicke "New SSH key"
+  # - Title: "Odoo Server - $(hostname)"
+  # - Key type: "Authentication Key" (Standard)
+  # - Key: Füge den KOMPLETTEN öffentlichen Schlüssel ein (ssh-ed25519 AAAA...)
+  # - Klicke "Add SSH key"
   
-  # Schritt 4: Verbindung testen
+  # Schritt 4: SSH-Schlüssel für Odoo Enterprise Repository berechtigen
+  # WICHTIG: Der GitHub-Account muss von Odoo für das Enterprise-Repository freigeschaltet sein!
+  # Kontaktiere deinen Odoo Account Manager oder Partner, um Zugriff zu erhalten:
+  # - E-Mail: sales@odoo.com oder dein Partner
+  # - Benötigte Info: Dein GitHub-Benutzername
+  # - Odoo fügt deinen Account zur "odoo/enterprise" Repository-Berechtigungsliste hinzu
+  
+  # Schritt 5: SSH-Verbindung zu GitHub testen
   sudo -u odoo ssh -T git@github.com
-  # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated..."
+  # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated, but GitHub does not provide shell access."
+  
+  # Schritt 6: Zugriff auf Enterprise Repository testen
+  sudo -u odoo ssh -T git@github.com
+  sudo -u odoo git ls-remote git@github.com:odoo/enterprise.git
+  # Erwartete Ausgabe: Liste der Branches (19.0, 18.0, master, etc.)
+  # FEHLER "Repository not found": Dein Account hat noch keinen Zugriff -> Kontaktiere Odoo
+  
+  # Schritt 7: Jetzt Enterprise installieren
+  sudo ./scripts/install-enterprise.sh
   ```
   
   **Alternative mit RSA-Schlüssel (falls ED25519 nicht verfügbar):**
@@ -215,6 +239,13 @@ sudo systemctl restart odoo
   ```bash
   sudo -u odoo ssh -T git@github.com
   # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated..."
+  ```
+
+- **Enterprise Repository-Zugriff testen:**
+  ```bash
+  sudo -u odoo git ls-remote git@github.com:odoo/enterprise.git
+  # Erwartete Ausgabe: Liste aller Branches
+  # Fehler "Repository not found" = Kein Zugriff -> Odoo kontaktieren
   ```
 
 **Manuelle Konfiguration:**
