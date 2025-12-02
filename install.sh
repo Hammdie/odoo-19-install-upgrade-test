@@ -395,20 +395,19 @@ show_interactive_menu() {
                 echo
                 echo -e "${YELLOW}Nginx + SSL Setup${NC}"
                 echo -e "${BLUE}━━━━━━━━━━━━━━━━━${NC}"
-                read -p "Enter domain name (e.g., odoo.example.com): " NGINX_DOMAIN
-                read -p "Enter email for Let's Encrypt: " NGINX_EMAIL
+                echo
                 
-                if [[ -z "$NGINX_DOMAIN" ]] || [[ -z "$NGINX_EMAIL" ]]; then
-                    echo -e "${RED}Error: Domain and email are required${NC}"
-                    sleep 2
-                    continue
+                # Rufe das Nginx-Setup-Script direkt auf (es ist bereits interaktiv)
+                if [[ -f "$SCRIPT_DIR/scripts/setup-odoo-nginx.sh" ]]; then
+                    bash "$SCRIPT_DIR/scripts/setup-odoo-nginx.sh"
+                else
+                    echo -e "${RED}Error: setup-odoo-nginx.sh not found${NC}"
+                    echo -e "${YELLOW}Expected location: $SCRIPT_DIR/scripts/setup-odoo-nginx.sh${NC}"
                 fi
                 
-                SETUP_NGINX=true
-                SKIP_SYSTEM_UPDATE=true
-                SKIP_ODOO_INSTALL=true
-                SKIP_CRON_SETUP=true
-                return 0
+                echo
+                read -p "Press Enter to return to menu..."
+                continue
                 ;;
             5)
                 echo
@@ -1729,13 +1728,20 @@ main() {
         log "WARN" "Enterprise installation failed - continuing without Enterprise edition"
     fi
     
-    # Run Nginx setup if configured
-    if ! run_nginx_setup; then
-        log "WARN" "Nginx setup failed - Odoo is still accessible via HTTP on port 8069"
+    # Verify installation BEFORE Nginx setup (Odoo must be running first!)
+    if ! verify_installation; then
+        log "ERROR" "Installation verification failed - aborting Nginx setup"
+        log "INFO" "Please check Odoo service status and logs:"
+        log "INFO" "  sudo systemctl status odoo"
+        log "INFO" "  sudo journalctl -u odoo -n 50"
+        log "INFO" "You can run Nginx setup later manually:"
+        log "INFO" "  sudo $PROJECT_ROOT/scripts/setup-odoo-nginx.sh"
+    else
+        # Run Nginx setup only if verification passed
+        if ! run_nginx_setup; then
+            log "WARN" "Nginx setup failed - Odoo is still accessible via HTTP on port 8069"
+        fi
     fi
-    
-    # Verify installation
-    verify_installation
     
     # Show final summary
     show_final_summary
