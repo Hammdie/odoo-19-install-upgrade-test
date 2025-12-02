@@ -85,6 +85,166 @@ EOF
     echo
 }
 
+# Show Fixes & Patches submenu
+show_fixes_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}${BOLD}"
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║          Fixes & Patches - Maintenance Tools               ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        echo -e "${NC}"
+        echo
+        echo -e "${YELLOW}System Fixes:${NC}"
+        echo -e "  ${GREEN}1)${NC} Fix PostgreSQL Authentication"
+        echo -e "     Configure localhost trust (no password)"
+        echo
+        echo -e "  ${GREEN}2)${NC} Fix Firewall Settings"
+        echo -e "     Configure UFW for Odoo ports (8069, 8072, 80, 443)"
+        echo
+        echo -e "  ${GREEN}3)${NC} Fix Odoo Dependencies"
+        echo -e "     Reinstall Python packages and dependencies"
+        echo
+        echo -e "  ${GREEN}4)${NC} Repair Database"
+        echo -e "     Run database maintenance and repair tools"
+        echo
+        echo -e "  ${GREEN}5)${NC} Test Odoo Dependencies"
+        echo -e "     Verify all Python dependencies are installed"
+        echo
+        echo -e "  ${GREEN}6)${NC} Test Odoo User Permissions"
+        echo -e "     Verify file permissions and user access"
+        echo
+        echo -e "  ${GREEN}7)${NC} Set PostgreSQL Password"
+        echo -e "     Configure database password manually"
+        echo
+        echo -e "  ${GREEN}8)${NC} Test Cron Jobs"
+        echo -e "     Verify automated tasks are configured correctly"
+        echo
+        echo -e "  ${RED}0)${NC} Back to Main Menu"
+        echo
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo
+        
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-8]: "${NC})" fix_choice
+        
+        case $fix_choice in
+            1)
+                echo
+                echo -e "${YELLOW}PostgreSQL Authentication Fix${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/fix-postgres-auth.sh" ]]; then
+                    bash "$PROJECT_ROOT/fix-postgres-auth.sh"
+                else
+                    echo -e "${RED}Error: fix-postgres-auth.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                echo
+                echo -e "${YELLOW}Firewall Configuration${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/fix-firewall.sh" ]]; then
+                    bash "$PROJECT_ROOT/fix-firewall.sh"
+                else
+                    echo -e "${RED}Error: fix-firewall.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                echo
+                echo -e "${YELLOW}Odoo Dependencies Fix${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/fix-odoo-dependencies.sh" ]]; then
+                    bash "$PROJECT_ROOT/fix-odoo-dependencies.sh"
+                else
+                    echo -e "${RED}Error: fix-odoo-dependencies.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                echo
+                echo -e "${YELLOW}Database Repair${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/repair-database.sh" ]]; then
+                    bash "$PROJECT_ROOT/repair-database.sh"
+                else
+                    echo -e "${RED}Error: repair-database.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                echo
+                echo -e "${YELLOW}Test Odoo Dependencies${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/test-odoo-dependencies.sh" ]]; then
+                    bash "$PROJECT_ROOT/test-odoo-dependencies.sh"
+                else
+                    echo -e "${RED}Error: test-odoo-dependencies.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                echo
+                echo -e "${YELLOW}Test Odoo User Permissions${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/test-odoo-user-permissions.sh" ]]; then
+                    bash "$PROJECT_ROOT/test-odoo-user-permissions.sh"
+                else
+                    echo -e "${RED}Error: test-odoo-user-permissions.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            7)
+                echo
+                echo -e "${YELLOW}Set PostgreSQL Password${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/scripts/set-postgres-password.sh" ]]; then
+                    bash "$PROJECT_ROOT/scripts/set-postgres-password.sh"
+                else
+                    echo -e "${RED}Error: set-postgres-password.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            8)
+                echo
+                echo -e "${YELLOW}Test Cron Jobs${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/test-cron.sh" ]]; then
+                    bash "$PROJECT_ROOT/test-cron.sh"
+                else
+                    echo -e "${RED}Error: test-cron.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
+            0)
+                show_banner
+                return 0
+                ;;
+            *)
+                echo
+                echo -e "${RED}Invalid option. Please select 0-8.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
+}
+
 # Usage function
 usage() {
     echo -e "${BOLD}Odoo 19.0 Installation & Upgrade Script${NC}"
@@ -348,6 +508,9 @@ show_interactive_menu() {
         echo -e "  ${YELLOW}7)${NC} ${BOLD}Show Help${NC}"
         echo -e "     Display detailed usage information"
         echo
+        echo -e "  ${YELLOW}9)${NC} ${BOLD}Fixes & Patches${NC}"
+        echo -e "     Access system fixes and maintenance tools"
+        echo
         echo -e "  ${RED}0)${NC} ${BOLD}Exit${NC}"
         echo -e "     Cancel installation"
         echo
@@ -362,7 +525,7 @@ show_interactive_menu() {
             echo
         fi
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-8]: "${NC})" choice
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-9]: "${NC})" choice
         
         case $choice in
             1)
@@ -575,6 +738,10 @@ show_interactive_menu() {
                     continue
                 fi
                 ;;
+            9)
+                # Fixes & Patches Submenu
+                show_fixes_menu
+                ;;
             0)
                 echo
                 log "INFO" "Installation cancelled by user"
@@ -582,7 +749,7 @@ show_interactive_menu() {
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-8.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-9.${NC}"
                 sleep 2
                 show_banner
                 ;;
