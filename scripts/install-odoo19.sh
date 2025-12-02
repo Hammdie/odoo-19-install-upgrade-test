@@ -221,27 +221,96 @@ install_odoo_dependencies() {
 
     # Install from Odoo requirements.txt
     if [[ -f "$ODOO_HOME/odoo/requirements.txt" ]]; then
-        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -r "$ODOO_HOME/odoo/requirements.txt" 2>&1 | tee -a "$LOG_FILE"
+        log "INFO" "Installing dependencies from requirements.txt..."
+        if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -r "$ODOO_HOME/odoo/requirements.txt" 2>&1 | tee -a "$LOG_FILE"; then
+            log "WARN" "Some requirements failed, retrying individually..."
+            # Retry each requirement individually to identify failures
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                # Skip comments and empty lines
+                [[ "$line" =~ ^[[:space:]]*# ]] && continue
+                [[ -z "${line// }" ]] && continue
+                # Extract package name (before any version specifier)
+                local pkg=$(echo "$line" | sed 's/[<>=!].*//' | tr -d '[:space:]')
+                [[ -z "$pkg" ]] && continue
+                log "INFO" "Installing $pkg..."
+                python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$line" 2>&1 | tee -a "$LOG_FILE" || log "WARN" "Failed to install: $line"
+            done < "$ODOO_HOME/odoo/requirements.txt"
+        fi
     else
         log "WARN" "requirements.txt not found in Odoo source tree"
     fi
 
     # Ensure compatible lxml version (<5 retains html.clean.defs expected by Odoo)
-    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --upgrade "lxml<5" 2>&1 | tee -a "$LOG_FILE"
+    log "INFO" "Enforcing lxml < 5 for Odoo compatibility..."
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall "lxml<5" 2>&1 | tee -a "$LOG_FILE"
     
-    # Install additional common dependencies
+    # Install additional common dependencies that may not be in requirements.txt
     local additional_deps=(
+        "passlib"
         "psycopg2-binary"
         "python-ldap"
         "qrcode"
         "vobject"
         "werkzeug"
+        "Pillow"
+        "reportlab"
+        "num2words"
+        "xlrd"
+        "xlwt"
+        "xlsxwriter"
+        "polib"
+        "babel"
+        "pytz"
+        "chardet"
+        "cryptography"
+        "decorator"
+        "docutils"
+        "gevent"
+        "greenlet"
+        "idna"
+        "Jinja2"
+        "MarkupSafe"
+        "ofxparse"
+        "PyPDF2"
+        "pyserial"
+        "python-dateutil"
+        "pyusb"
+        "requests"
+        "urllib3"
+        "zeep"
     )
     
+    log "INFO" "Installing additional Odoo dependencies..."
     for dep in "${additional_deps[@]}"; do
-        log "INFO" "Installing $dep..."
-        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$dep" 2>&1 | tee -a "$LOG_FILE"
+        if ! python3 -m pip show "$dep" &>/dev/null; then
+            log "INFO" "Installing $dep..."
+            python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$dep" 2>&1 | tee -a "$LOG_FILE" || log "WARN" "Failed to install: $dep"
+        fi
     done
+    
+    # Verify critical dependencies are installed
+    local critical_deps=("passlib" "lxml" "psycopg2" "werkzeug" "Pillow" "babel" "gevent")
+    local missing_critical=()
+    
+    for dep in "${critical_deps[@]}"; do
+        if ! python3 -c "import ${dep,,}" 2>/dev/null; then
+            # Try alternate import names
+            local import_name="${dep,,}"
+            [[ "$dep" == "Pillow" ]] && import_name="PIL"
+            [[ "$dep" == "psycopg2" ]] && import_name="psycopg2"
+            if ! python3 -c "import $import_name" 2>/dev/null; then
+                missing_critical+=("$dep")
+            fi
+        fi
+    done
+    
+    if [[ ${#missing_critical[@]} -gt 0 ]]; then
+        log "ERROR" "Critical dependencies missing: ${missing_critical[*]}"
+        log "ERROR" "Odoo will not start without these packages!"
+        exit 1
+    fi
+    
+    log "SUCCESS" "Odoo Python dependencies installed"
 }
 
 # Create Odoo configuration
