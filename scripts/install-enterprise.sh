@@ -144,24 +144,42 @@ check_existing_installation() {
     fi
 }
 
-# Setup SSH key for odoo user
+# Setup SSH key for current user
 setup_ssh_key() {
-    log "INFO" "Checking SSH configuration for odoo user..."
+    # Get current user (the one who called sudo)
+    local current_user="${SUDO_USER:-$USER}"
+    local user_home=$(eval echo ~$current_user)
+    local ssh_dir="$user_home/.ssh"
+    local ssh_key_ed25519="$ssh_dir/id_ed25519"
+    local ssh_key_rsa="$ssh_dir/id_rsa"
     
-    local ssh_dir="/var/lib/odoo/.ssh"
-    local ssh_key="$ssh_dir/id_ed25519"
+    log "INFO" "Checking SSH configuration for user: $current_user"
+    log "INFO" "SSH directory: $ssh_dir"
     
-    # Check if SSH key exists
-    if [[ -f "$ssh_key" ]]; then
-        log "INFO" "SSH key already exists for odoo user"
-        
-        # Test SSH connection
-        if sudo -u "$ODOO_USER" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-            log "SUCCESS" "SSH authentication verified"
+    # Check if any SSH key exists
+    local has_ed25519=false
+    local has_rsa=false
+    
+    if [[ -f "$ssh_key_ed25519" ]]; then
+        has_ed25519=true
+        log "INFO" "Found ED25519 key: $ssh_key_ed25519"
+    fi
+    
+    if [[ -f "$ssh_key_rsa" ]]; then
+        has_rsa=true
+        log "INFO" "Found RSA key: $ssh_key_rsa"
+    fi
+    
+    # Test SSH connection with current user
+    if $has_ed25519 || $has_rsa; then
+        if sudo -u "$current_user" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+            log "SUCCESS" "SSH authentication verified for $current_user"
             return 0
         else
-            log "WARN" "SSH key exists but authentication failed"
+            log "WARN" "SSH key exists but GitHub authentication failed"
         fi
+    else
+        log "WARN" "No SSH keys found for $current_user"
     fi
     
     # Ask user to configure SSH
@@ -171,9 +189,21 @@ setup_ssh_key() {
     echo -e "  1. Valid Odoo Partner access"
     echo -e "  2. SSH key configured for GitHub"
     echo
+    echo -e "${BOLD}Current Status:${NC}"
+    if $has_ed25519; then
+        echo -e "  ${GREEN}✓${NC} ED25519 key exists"
+    else
+        echo -e "  ${RED}✗${NC} No ED25519 key"
+    fi
+    if $has_rsa; then
+        echo -e "  ${GREEN}✓${NC} RSA key exists"
+    else
+        echo -e "  ${RED}✗${NC} No RSA key"
+    fi
+    echo
     echo -e "${BOLD}Choose an option:${NC}"
     echo -e "  ${GREEN}1)${NC} I have already added SSH key to GitHub (test connection)"
-    echo -e "  ${GREEN}2)${NC} Generate new SSH key and show public key"
+    echo -e "  ${GREEN}2)${NC} Generate new ED25519 SSH key and show public key"
     echo -e "  ${GREEN}3)${NC} Skip SSH check and try to clone anyway"
     echo -e "  ${RED}4)${NC} Cancel installation"
     echo
@@ -183,31 +213,42 @@ setup_ssh_key() {
         case $choice in
             1)
                 # Test connection
-                if sudo -u "$ODOO_USER" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+                if sudo -u "$current_user" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
                     log "SUCCESS" "SSH authentication verified!"
                     return 0
                 else
                     log "ERROR" "SSH authentication failed"
                     log "INFO" "Please add your SSH key to GitHub: https://github.com/settings/keys"
+                    if $has_ed25519; then
+                        echo
+                        echo -e "${BLUE}Your ED25519 public key:${NC}"
+                        sudo -u "$current_user" cat "$ssh_key_ed25519.pub"
+                    elif $has_rsa; then
+                        echo
+                        echo -e "${BLUE}Your RSA public key:${NC}"
+                        sudo -u "$current_user" cat "$ssh_key_rsa.pub"
+                    fi
                     read -p "Press Enter to try again or Ctrl+C to cancel..."
                     continue
                 fi
                 ;;
             2)
                 # Generate SSH key
-                log "INFO" "Generating SSH key for odoo user..."
-                sudo -u "$ODOO_USER" mkdir -p "$ssh_dir"
-                sudo -u "$ODOO_USER" chmod 700 "$ssh_dir"
+                log "INFO" "Generating ED25519 SSH key for $current_user..."
+                sudo -u "$current_user" mkdir -p "$ssh_dir"
+                sudo -u "$current_user" chmod 700 "$ssh_dir"
                 
-                if [[ ! -f "$ssh_key" ]]; then
-                    sudo -u "$ODOO_USER" ssh-keygen -t ed25519 -C "odoo@$(hostname)" -f "$ssh_key" -N ""
+                if [[ ! -f "$ssh_key_ed25519" ]]; then
+                    sudo -u "$current_user" ssh-keygen -t ed25519 -C "$current_user@$(hostname)" -f "$ssh_key_ed25519" -N ""
                     log "SUCCESS" "SSH key generated"
+                else
+                    log "INFO" "SSH key already exists, showing public key"
                 fi
                 
                 echo
                 echo -e "${GREEN}${BOLD}Public SSH Key:${NC}"
                 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                sudo -u "$ODOO_USER" cat "$ssh_key.pub"
+                sudo -u "$current_user" cat "$ssh_key_ed25519.pub"
                 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
                 echo
                 echo -e "${YELLOW}Please add this key to GitHub:${NC}"
@@ -219,7 +260,7 @@ setup_ssh_key() {
                 read -p "Press Enter when done..."
                 
                 # Test connection
-                if sudo -u "$ODOO_USER" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+                if sudo -u "$current_user" ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
                     log "SUCCESS" "SSH authentication verified!"
                     return 0
                 else
@@ -245,19 +286,21 @@ setup_ssh_key() {
 
 # Clone Enterprise repository
 clone_enterprise() {
+    local current_user="${SUDO_USER:-$USER}"
+    
     log "INFO" "Cloning Odoo Enterprise repository..."
     log "INFO" "Source: git@github.com:odoo/enterprise.git (branch 19.0)"
     log "INFO" "Target: $ENTERPRISE_PATH"
+    log "INFO" "Cloning as user: $current_user"
     
     # Create parent directory
     local parent_dir="$(dirname "$ENTERPRISE_PATH")"
     if [[ ! -d "$parent_dir" ]]; then
         mkdir -p "$parent_dir"
-        chown "$ODOO_USER:$ODOO_USER" "$parent_dir"
     fi
     
-    # Clone repository
-    if sudo -u "$ODOO_USER" git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1 | tee -a "$LOG_FILE"; then
+    # Clone repository as current user (who has SSH key)
+    if sudo -u "$current_user" git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "Enterprise repository cloned successfully"
     else
         log "ERROR" "Failed to clone Enterprise repository"
@@ -268,7 +311,8 @@ clone_enterprise() {
         exit 1
     fi
     
-    # Set permissions
+    # Set permissions to odoo user
+    log "INFO" "Setting ownership to $ODOO_USER..."
     chown -R "$ODOO_USER:$ODOO_USER" "$ENTERPRISE_PATH"
     chmod -R 755 "$ENTERPRISE_PATH"
     

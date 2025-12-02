@@ -134,37 +134,52 @@ sudo ./install.sh --auto --enterprise
 sudo ./scripts/install-enterprise.sh
 ```
 
-**SSH-Schlüssel für Odoo-Benutzer erstellen (vor Enterprise-Installation):**
+**SSH-Schlüssel für aktuellen Benutzer erstellen:**
+
+Das Enterprise-Installationsscript verwendet automatisch den SSH-Schlüssel des **aktuell eingeloggten Benutzers** (der das Script mit `sudo` ausführt). Der SSH-Schlüssel muss NICHT für den odoo-Benutzer erstellt werden.
+
 ```bash
-# 1. SSH-Verzeichnis für odoo-Benutzer erstellen
-sudo -u odoo mkdir -p /var/lib/odoo/.ssh
-sudo -u odoo chmod 700 /var/lib/odoo/.ssh
+# SSH-Schlüssel wird automatisch erstellt, wenn Sie das Enterprise-Script ausführen
+sudo ./scripts/install-enterprise.sh
 
-# 2. SSH-Schlüssel generieren (ED25519 - moderner und sicherer)
-sudo -u odoo ssh-keygen -t ed25519 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_ed25519 -N ""
+# Das Script führt Sie durch 4 Optionen:
+# 1. Testen der bestehenden SSH-Verbindung zu GitHub
+# 2. Generieren eines neuen ED25519 SSH-Schlüssels (empfohlen)
+# 3. SSH-Check überspringen und trotzdem klonen
+# 4. Installation abbrechen
 
-# ODER klassischer RSA-Schlüssel (falls ED25519 nicht unterstützt wird)
-sudo -u odoo ssh-keygen -t rsa -b 4096 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_rsa -N ""
+# Manuelle SSH-Schlüssel-Erstellung (falls gewünscht):
+# ED25519 (empfohlen - modern und sicher):
+ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ~/.ssh/id_ed25519 -N ""
 
-# 3. Öffentlichen Schlüssel anzeigen (zum Kopieren)
-sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
+# ODER klassischer RSA-Schlüssel (falls ED25519 nicht unterstützt):
+ssh-keygen -t rsa -b 4096 -C "$(whoami)@$(hostname)" -f ~/.ssh/id_rsa -N ""
+
+# Öffentlichen Schlüssel anzeigen (zum Kopieren für GitHub):
+cat ~/.ssh/id_ed25519.pub
 # ODER bei RSA:
-sudo -u odoo cat /var/lib/odoo/.ssh/id_rsa.pub
+cat ~/.ssh/id_rsa.pub
 
-# 4. Schlüssel zu GitHub hinzufügen:
-#    - Gehe zu: https://github.com/settings/keys
-#    - Klicke "New SSH key"
-#    - Title: "Odoo Server - $(hostname)"
-#    - Key: Füge den öffentlichen Schlüssel ein (ssh-ed25519 AAAA... oder ssh-rsa AAAA...)
-#    - Klicke "Add SSH key"
+# SSH-Schlüssel zu GitHub hinzufügen:
+# 1. Gehe zu: https://github.com/settings/keys
+# 2. Klicke "New SSH key"
+# 3. Title: "Odoo Server - $(hostname)"
+# 4. Key: Füge den öffentlichen Schlüssel ein (ssh-ed25519 AAAA... oder ssh-rsa AAAA...)
+# 5. Klicke "Add SSH key"
 
-# 5. SSH-Verbindung zu GitHub testen
-sudo -u odoo ssh -T git@github.com
+# SSH-Verbindung zu GitHub testen:
+ssh -T git@github.com
 # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated, but GitHub does not provide shell access."
 
-# 6. Jetzt Enterprise installieren
+# Jetzt Enterprise installieren:
 sudo ./scripts/install-enterprise.sh
 ```
+
+**Wichtig:** 
+- Der SSH-Schlüssel wird für **Ihren aktuellen Benutzer** erstellt (nicht für odoo)
+- Das Repository wird mit Ihrem SSH-Schlüssel geklont
+- Die Dateien werden anschließend automatisch dem odoo-Benutzer zugewiesen
+- Sie benötigen Odoo Partner-Zugang für das Enterprise Repository
 
 **Hinweis zu SSH-Schlüssel-Typen:**
 - **ED25519** (empfohlen): Moderner, sicherer, kleiner - wird von GitHub seit 2020 empfohlen
@@ -191,14 +206,14 @@ sudo systemctl restart odoo
 - **Odoo Enterprise GitHub-Zugriff:** Repository-Zugang muss von Odoo freigeschaltet werden
 - **SSH-Schlüssel für GitHub:** Zugriff auf `git@github.com:odoo/enterprise.git`
   
-  **SSH-Schlüssel Schritt-für-Schritt:**
+  **SSH-Schlüssel Schritt-für-Schritt (für aktuellen Benutzer):**
   ```bash
-  # Schritt 1: SSH-Schlüssel für odoo-Benutzer generieren
-  sudo -u odoo ssh-keygen -t ed25519 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_ed25519 -N ""
+  # Schritt 1: SSH-Schlüssel generieren (falls noch nicht vorhanden)
+  ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)" -f ~/.ssh/id_ed25519 -N ""
   
   # Schritt 2: Öffentlichen Schlüssel anzeigen und kopieren
-  sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub
-  # Ausgabe: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... odoo@yourserver
+  cat ~/.ssh/id_ed25519.pub
+  # Ausgabe: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... username@yourserver
   
   # Schritt 3: SSH-Schlüssel zu GitHub-Account hinzufügen
   # - Gehe zu: https://github.com/settings/keys
@@ -216,12 +231,11 @@ sudo systemctl restart odoo
   # - Odoo fügt deinen Account zur "odoo/enterprise" Repository-Berechtigungsliste hinzu
   
   # Schritt 5: SSH-Verbindung zu GitHub testen
-  sudo -u odoo ssh -T git@github.com
+  ssh -T git@github.com
   # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated, but GitHub does not provide shell access."
   
   # Schritt 6: Zugriff auf Enterprise Repository testen
-  sudo -u odoo ssh -T git@github.com
-  sudo -u odoo git ls-remote git@github.com:odoo/enterprise.git
+  git ls-remote git@github.com:odoo/enterprise.git
   # Erwartete Ausgabe: Liste der Branches (19.0, 18.0, master, etc.)
   # FEHLER "Repository not found": Dein Account hat noch keinen Zugriff -> Kontaktiere Odoo
   
@@ -230,20 +244,29 @@ sudo systemctl restart odoo
   ```
   
   **Alternative mit RSA-Schlüssel (falls ED25519 nicht verfügbar):**
+  
+  **✅ Standard & korrekt (empfohlen):**
   ```bash
-  sudo -u odoo ssh-keygen -t rsa -b 4096 -C "odoo@$(hostname)" -f /var/lib/odoo/.ssh/id_rsa -N ""
-  sudo -u odoo cat /var/lib/odoo/.ssh/id_rsa.pub
+  # So erstellst du ~/.ssh/id_rsa.pub korrekt (inkl. privatem Key)
+  ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
+  
+  # 🔹 Ergebnis:
+  # Privater Key: ~/.ssh/id_rsa
+  # Public Key:   ~/.ssh/id_rsa.pub ✅
+  
+  # Öffentlichen Schlüssel anzeigen:
+  cat ~/.ssh/id_rsa.pub
   ```
 
 - **GitHub SSH-Verbindung testen:**
   ```bash
-  sudo -u odoo ssh -T git@github.com
+  ssh -T git@github.com
   # Erwartete Ausgabe: "Hi <username>! You've successfully authenticated..."
   ```
 
 - **Enterprise Repository-Zugriff testen:**
   ```bash
-  sudo -u odoo git ls-remote git@github.com:odoo/enterprise.git
+  git ls-remote git@github.com:odoo/enterprise.git
   # Erwartete Ausgabe: Liste aller Branches
   # Fehler "Repository not found" = Kein Zugriff -> Odoo kontaktieren
   ```
