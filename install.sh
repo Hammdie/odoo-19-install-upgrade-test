@@ -81,6 +81,8 @@ EOF
     echo -e "${GREEN}Automated installation and configuration for Odoo 19.0${NC}"
     echo -e "${YELLOW}This script will prepare your system for Odoo 19.0 with automatic updates${NC}"
     echo
+    echo -e "${BLUE}📖 Documentation: ${BOLD}https://github.com/Hammdie/odoo-upgrade-cron${NC}"
+    echo
 }
 
 # Usage function
@@ -353,7 +355,16 @@ show_interactive_menu() {
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-7]: "${NC})" choice
+        # Show additional option for Enterprise installation if Odoo already exists
+        if [[ "$EXISTING_ODOO_FOUND" == true ]]; then
+            echo
+            echo -e "${YELLOW}Additional Options:${NC}"
+            echo -e "  ${YELLOW}8)${NC} ${BOLD}Install Enterprise (Post-Installation)${NC}"
+            echo -e "     Add Enterprise edition to existing Odoo installation"
+            echo
+        fi
+        
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-8]: "${NC})" choice
         
         case $choice in
             1)
@@ -463,6 +474,79 @@ show_interactive_menu() {
                 show_banner
                 continue
                 ;;
+            8)
+                # Only available when existing Odoo is found
+                if [[ "$EXISTING_ODOO_FOUND" != true ]]; then
+                    echo -e "${RED}Error: This option is only available for existing installations${NC}"
+                    sleep 2
+                    show_banner
+                    continue
+                fi
+                
+                echo
+                echo -e "${YELLOW}Enterprise Edition Post-Installation${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                echo -e "${YELLOW}Requirements:${NC}"
+                echo -e "  • Valid Odoo Enterprise subscription"
+                echo -e "  • SSH key configured for GitHub (odoo user)"
+                echo -e "  • Access to git@github.com:odoo/enterprise.git"
+                echo
+                echo -e "${BLUE}SSH Key Setup Instructions:${NC}"
+                echo -e "  1. Generate SSH key for odoo user:"
+                echo -e "     ${GREEN}sudo -u odoo ssh-keygen -t ed25519 -C \"odoo@\$(hostname)\" -f /var/lib/odoo/.ssh/id_ed25519 -N \"\"${NC}"
+                echo
+                echo -e "  2. Show public key:"
+                echo -e "     ${GREEN}sudo -u odoo cat /var/lib/odoo/.ssh/id_ed25519.pub${NC}"
+                echo
+                echo -e "  3. Add to GitHub: ${BLUE}https://github.com/settings/keys${NC}"
+                echo
+                echo -e "  4. Test connection:"
+                echo -e "     ${GREEN}sudo -u odoo ssh -T git@github.com${NC}"
+                echo
+                echo -e "${BLUE}Full documentation:${NC}"
+                echo -e "  ${BLUE}https://github.com/Hammdie/odoo-upgrade-cron#odoo-enterprise-edition${NC}"
+                echo
+                
+                read -p "Do you want to continue? (y/N): " -n 1 -r
+                echo
+                
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    echo
+                    log "INFO" "Running Enterprise installation script..."
+                    
+                    local enterprise_script="$PROJECT_ROOT/scripts/install-enterprise.sh"
+                    
+                    if [[ -f "$enterprise_script" ]]; then
+                        # Make sure script is executable
+                        chmod +x "$enterprise_script"
+                        
+                        # Run the enterprise installation script
+                        if bash "$enterprise_script" 2>&1 | tee -a "$LOG_FILE"; then
+                            log "SUCCESS" "Enterprise installation completed"
+                            echo
+                            read -p "Press Enter to return to menu..."
+                            show_banner
+                            continue
+                        else
+                            log "ERROR" "Enterprise installation failed"
+                            echo
+                            read -p "Press Enter to return to menu..."
+                            show_banner
+                            continue
+                        fi
+                    else
+                        log "ERROR" "Enterprise installation script not found: $enterprise_script"
+                        echo
+                        read -p "Press Enter to return to menu..."
+                        show_banner
+                        continue
+                    fi
+                else
+                    show_banner
+                    continue
+                fi
+                ;;
             0)
                 echo
                 log "INFO" "Installation cancelled by user"
@@ -470,7 +554,7 @@ show_interactive_menu() {
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-7.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-8.${NC}"
                 sleep 2
                 show_banner
                 ;;
@@ -1423,6 +1507,7 @@ show_final_summary() {
     echo
     echo -e "${GREEN}${BOLD}🎉 Odoo 19.0 Upgrade System Installation Complete!${NC}"
     echo
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BLUE}${BOLD}Installation Summary:${NC}"
     echo -e "${BLUE}===================${NC}"
     
@@ -1520,12 +1605,16 @@ show_final_summary() {
     echo
     echo -e "${BLUE}${BOLD}Support & Documentation:${NC}"
     echo -e "${BLUE}========================${NC}"
-    echo -e "${GREEN}📖 Project Repository:${NC} https://github.com/Hammdie/odoo-upgrade-cron"
+    echo -e "${GREEN}📖 Full Documentation:${NC} ${BOLD}https://github.com/Hammdie/odoo-upgrade-cron${NC}"
     echo -e "${GREEN}📋 Installation Log:${NC} $LOG_FILE"
     echo -e "${GREEN}🐛 Report Issues:${NC} https://github.com/Hammdie/odoo-upgrade-cron/issues"
+    echo -e "${GREEN}💬 Discussions:${NC} https://github.com/Hammdie/odoo-upgrade-cron/discussions"
+    echo
+    echo -e "${YELLOW}💡 Tip:${NC} Click or copy the links above to access documentation"
     echo
     
     log "INFO" "Installation log saved to: $LOG_FILE"
+    log "INFO" "Documentation: https://github.com/Hammdie/odoo-upgrade-cron"
     log "INFO" "Thank you for using the Odoo 19.0 Upgrade System!"
 }
 
@@ -1538,16 +1627,24 @@ handle_error() {
     
     echo
     echo -e "${RED}${BOLD}❌ Installation Failed!${NC}"
-    echo -e "${YELLOW}Error occurred at line $line_number${NC}"
-    echo -e "${YELLOW}Check the log file for details: $LOG_FILE${NC}"
+    echo -e "${YELLOW}Error occurred at line $line_number (exit code: $exit_code)${NC}"
+    echo -e "${YELLOW}Check the log file for details: ${BOLD}$LOG_FILE${NC}"
     echo
-    echo -e "${BLUE}Common solutions:${NC}"
+    echo -e "${BLUE}${BOLD}Common solutions:${NC}"
     echo -e "${YELLOW}•${NC} Check internet connectivity"
     echo -e "${YELLOW}•${NC} Ensure sufficient disk space (20GB+)"
     echo -e "${YELLOW}•${NC} Verify system requirements"
     echo -e "${YELLOW}•${NC} Run with sudo privileges"
     echo
-    echo -e "${BLUE}For help:${NC} https://github.com/Hammdie/odoo-upgrade-cron/issues"
+    echo -e "${BLUE}${BOLD}Need help?${NC}"
+    echo -e "${GREEN}📖 Documentation:${NC} ${BOLD}https://github.com/Hammdie/odoo-upgrade-cron${NC}"
+    echo -e "${GREEN}🐛 Report Issue:${NC} ${BOLD}https://github.com/Hammdie/odoo-upgrade-cron/issues${NC}"
+    echo -e "${GREEN}💬 Get Support:${NC} ${BOLD}https://github.com/Hammdie/odoo-upgrade-cron/discussions${NC}"
+    echo
+    echo -e "${YELLOW}💡 Tip:${NC} Click the links above to access help resources"
+    echo
+    
+    log "ERROR" "Installation failed - See https://github.com/Hammdie/odoo-upgrade-cron for help"
     
     exit $exit_code
 }
@@ -1570,6 +1667,7 @@ main() {
     log "INFO" "Starting Odoo 19.0 Upgrade System Installation"
     log "INFO" "Installation directory: $PROJECT_ROOT"
     log "INFO" "Log file: $LOG_FILE"
+    log "INFO" "Documentation: https://github.com/Hammdie/odoo-upgrade-cron"
     log "INFO" "Arguments: $*"
     
     # Pre-installation checks
