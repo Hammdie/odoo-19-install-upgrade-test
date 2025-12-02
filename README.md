@@ -1,25 +1,27 @@
 # Odoo Install/Auto-Upgrade/Test
 
-Ein umfassendes Script-Repository für die automatisierte Aktualisierung und Wartung von Odoo 19.0 Installationen auf VM-Hosts.
+Ein umfassendes Script-Repository für die automatisierte Installation, Aktualisierung und Wartung von Odoo 19.0 Installationen auf Ubuntu-Servern.
 
 ## Übersicht
 
-Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die automatisierte Aktualisierung von Odoo 19.0 Installationen. Das Hauptziel ist es, VM-Hosts so zu konfigurieren, dass sie den Anforderungen von Odoo 19.0 entsprechen und regelmäßige Updates automatisch durchführen.
+Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die vollautomatische Installation und Wartung von Odoo 19.0. Das Hauptziel ist es, frische Ubuntu-Server (20.04+) mit einem einzigen Befehl in eine produktionsbereite Odoo-Umgebung zu verwandeln.
 
 ## Features
 
+- 🚀 **One-Command Installation** – Komplett automatisiert mit `./install.sh --auto`
 - 🔄 Automatische Odoo 19.0 Updates via Cron-Jobs
-- 🖥️ VM-Host Konfiguration für Odoo 19.0 Kompatibilität
+- 🖥️ Intelligente Erkennung bestehender Odoo-Installationen (Upgrade oder Neuinstallation)
 - 🔧 System-Anforderungen Überprüfung und Installation
-- 📝 Logging und Monitoring der Update-Prozesse
-- 🛡️ Backup-Erstellung vor Updates
+- 📝 Umfassendes Logging und Monitoring der Update-Prozesse
+- 🛡️ Automatische Backup-Erstellung vor Updates
 - ⚡ Performance-Optimierung für Odoo 19.0
-- **🔐 PostgreSQL Peer-Authentifizierung für Produktionsumgebungen**
-- **🔧 Automatische Reparatur-Scripts für beschädigte Installationen**
-- **🧪 Umfassende Dependency-Tests (Vector-Extension, wkhtmltopdf, Python-Pakete)**
-- **🔥 Automatische UFW-Firewall Konfiguration**
-- **👤 Automatische PostgreSQL-Benutzerberechtigungen**
-- **⚙️ Erkennung und Schonung vorhandener Odoo-Installationen**
+- 🔐 PostgreSQL Peer-Authentifizierung für Produktionsumgebungen
+- 🔧 Automatische Reparatur-Scripts für beschädigte Installationen
+- 🧪 Umfassende Dependency-Tests (Vector-Extension, wkhtmltopdf, Python-Pakete)
+- 🔥 Automatische UFW-Firewall Konfiguration
+- 👤 Automatische PostgreSQL-Benutzerberechtigungen
+- ⚙️ Erkennung und Schonung vorhandener Odoo-Installationen
+- 🐍 Kompatibel mit Ubuntu 22.04/24.04 „Externally Managed Environment" (pip --break-system-packages)
 
 ## Voraussetzungen
 
@@ -45,7 +47,7 @@ Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die auto
 
 ## Installation
 
-### Schnellinstallation
+### Schnellinstallation (empfohlen)
 
 ```bash
 # Repository klonen
@@ -55,9 +57,43 @@ cd odoo-upgrade-cron
 # Installationsscript ausführbar machen
 chmod +x install.sh
 
-# Installation starten
-sudo ./install.sh
+# Vollautomatische Installation starten (keine Prompts)
+sudo ./install.sh --auto
 ```
+
+Das war's! Odoo 19.0 ist nun unter `http://your-server-ip:8069` erreichbar.
+
+### Installationsoptionen
+
+```bash
+# Interaktive Installation (mit Bestätigungen)
+sudo ./install.sh
+
+# Vollautomatisch ohne Prompts
+sudo ./install.sh --auto
+
+# Neuinstallation erzwingen (entfernt bestehende Installation)
+sudo ./install.sh --auto --force
+
+# Nur System-Update überspringen
+sudo ./install.sh --auto --skip-system
+
+# Nur Cron-Setup überspringen
+sudo ./install.sh --auto --skip-cron
+
+# Hilfe anzeigen
+./install.sh --help
+```
+
+### Was passiert bei der Installation?
+
+1. **System-Vorbereitung** – Updates, PostgreSQL, Node.js, Python-Dependencies
+2. **Odoo 19.0 Download** – Klont das offizielle Odoo-Repository
+3. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0)
+4. **Datenbank-Setup** – Erstellt PostgreSQL-Benutzer und konfiguriert Authentifizierung
+5. **Systemd-Service** – Erstellt und aktiviert den Odoo-Dienst
+6. **Cron-Jobs** – Richtet automatische Wartung und Updates ein
+7. **Firewall** – Konfiguriert UFW für Ports 8069, 80, 443
 
 ### Manuelle Installation
 
@@ -85,6 +121,30 @@ sudo ./install.sh
    ```
 
 ## Verwendung
+
+### Nach der Installation
+
+```bash
+# Odoo-Status prüfen
+sudo systemctl status odoo
+
+# Odoo-Logs in Echtzeit verfolgen
+sudo journalctl -u odoo -f
+
+# Odoo neustarten
+sudo systemctl restart odoo
+
+# Odoo stoppen
+sudo systemctl stop odoo
+```
+
+### Web-Interface
+
+Nach erfolgreicher Installation ist Odoo erreichbar unter:
+- **Lokal:** http://localhost:8069
+- **Extern:** http://your-server-ip:8069
+
+Beim ersten Zugriff können Sie eine neue Datenbank erstellen.
 
 ### Grundlegende Verwendung
 
@@ -248,7 +308,15 @@ sudo systemctl restart postgresql
    sudo journalctl -u odoo -f
    ```
 
-2. **Datenbankverbindung fehlgeschlagen:**
+2. **`lxml.html.clean` AttributeError:**
+   ```bash
+   # Distro-Pakete entfernen und lxml < 5 installieren
+   sudo apt-get purge -y python3-lxml
+   python3 -m pip install --break-system-packages --force-reinstall "lxml<5"
+   sudo systemctl restart odoo
+   ```
+
+3. **Datenbankverbindung fehlgeschlagen:**
    ```bash
    # Teste PostgreSQL-Verbindung
    sudo -u postgres psql -l
@@ -258,7 +326,7 @@ sudo systemctl restart postgresql
    ./test-odoo-user-permissions.sh
    ```
 
-3. **PostgreSQL Authentifizierungsfehler:**
+4. **PostgreSQL Authentifizierungsfehler:**
    ```bash
    # Repariere Datenbank-Authentifizierung
    sudo ./repair-database.sh
@@ -267,7 +335,7 @@ sudo systemctl restart postgresql
    sudo ./fix-postgres-auth.sh
    ```
 
-4. **Firewall blockiert Odoo-Zugriff:**
+5. **Firewall blockiert Odoo-Zugriff:**
    ```bash
    # Konfiguriere Firewall automatisch
    sudo ./fix-firewall.sh
@@ -278,7 +346,16 @@ sudo systemctl restart postgresql
    sudo ufw allow 443/tcp
    ```
 
-5. **Fehlende Dependencies:**
+6. **pip „externally-managed-environment" Fehler (Ubuntu 22.04/24.04):**
+   ```bash
+   # Verwende --break-system-packages
+   python3 -m pip install --break-system-packages <paket>
+   
+   # Oder führe das Installationsscript erneut aus (behebt dies automatisch)
+   sudo ./scripts/install-odoo19.sh
+   ```
+
+7. **Fehlende Dependencies:**
    ```bash
    # Teste alle Abhängigkeiten
    ./test-odoo-dependencies.sh
@@ -286,7 +363,7 @@ sudo systemctl restart postgresql
    # Installiere fehlende Pakete basierend auf Test-Output
    ```
 
-6. **Unzureichende Berechtigungen:**
+8. **Unzureichende Berechtigungen:**
    ```bash
    sudo chown -R odoo:odoo /opt/odoo
    sudo chmod +x scripts/*.sh
@@ -434,6 +511,15 @@ Diese Software wird "wie besehen" zur Verfügung gestellt, ohne jegliche ausdrü
 Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollständig.
 
 ## Changelog
+
+### Version 1.2.0 (2025-12-02)
+- **Vollautomatische Installation:** `--auto` Flag für promptfreie Installation
+- **Ubuntu 24.04 Kompatibilität:** Automatische Erkennung und Verwendung von `--break-system-packages` für pip
+- **lxml Kompatibilität:** Erzwingt lxml < 5.0 (behebt `AttributeError: module 'lxml.html.clean' has no attribute 'defs'`)
+- **Verbesserte DB-Konfiguration:** Fehlende `DB_HOST`, `DB_PORT`, `DB_USER` Variablen werden jetzt korrekt initialisiert
+- **Cron-Setup Flexibilität:** Setup kann jetzt auch vor der Odoo-Installation ausgeführt werden
+- **Distro-Paket-Entfernung:** Automatische Entfernung von System-Odoo-Paketen (`odoo`, `python3-odoo`) vor Installation
+- **Dependency-Purge:** Vollständige Entfernung alter pip-Dependencies vor Neuinstallation
 
 ### Version 1.1.0 (2025-11-14)
 - **Verbesserte PostgreSQL-Authentifizierung:** Peer-Authentication für Produktionsumgebungen

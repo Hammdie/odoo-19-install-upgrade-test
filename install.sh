@@ -242,7 +242,8 @@ check_requirements() {
 
 # Display installation summary
 show_installation_plan() {
-    if [[ "$AUTO_MODE" == true ]] && [[ "$EXISTING_ODOO_FOUND" == false ]]; then
+    # In auto mode, skip showing the plan and prompt entirely
+    if [[ "$AUTO_MODE" == true ]]; then
         return 0
     fi
     
