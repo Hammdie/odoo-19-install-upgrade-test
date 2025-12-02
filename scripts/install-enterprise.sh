@@ -300,21 +300,59 @@ clone_enterprise() {
     fi
     
     # Clone repository as current user (who has SSH key)
-    if sudo -u "$current_user" git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "Enterprise repository cloned successfully"
-    else
-        log "ERROR" "Failed to clone Enterprise repository"
-        log "ERROR" "Please ensure:"
-        log "ERROR" "  1. You have valid Odoo Partner access"
-        log "ERROR" "  2. SSH key is added to GitHub: https://github.com/settings/keys"
-        log "ERROR" "  3. You have access to odoo/enterprise repository"
+    # Capture output and exit code properly
+    local clone_output
+    local clone_exit_code
+    
+    clone_output=$(sudo -u "$current_user" git clone --depth 1 --branch 19.0 git@github.com:odoo/enterprise.git "$ENTERPRISE_PATH" 2>&1)
+    clone_exit_code=$?
+    
+    # Log the output
+    echo "$clone_output" | tee -a "$LOG_FILE"
+    
+    # Check if clone was successful
+    if [[ $clone_exit_code -ne 0 ]] || [[ ! -d "$ENTERPRISE_PATH" ]]; then
+        log "ERROR" "Failed to clone Enterprise repository (exit code: $clone_exit_code)"
+        echo
+        echo -e "${RED}${BOLD}Common Issues:${NC}"
+        echo -e "  ${YELLOW}1. SSH Key not added to GitHub${NC}"
+        echo -e "     → Add your SSH key at: ${BLUE}https://github.com/settings/keys${NC}"
+        echo
+        echo -e "  ${YELLOW}2. No access to Odoo Enterprise repository${NC}"
+        echo -e "     → Contact Odoo Partner or sales@odoo.com"
+        echo -e "     → Provide your GitHub username for access"
+        echo
+        echo -e "  ${YELLOW}3. SSH connection issues${NC}"
+        echo -e "     → Test connection: ${BLUE}ssh -T git@github.com${NC}"
+        echo -e "     → Expected: 'Hi <username>! You've successfully authenticated...'"
+        echo
+        echo -e "${RED}Installation aborted.${NC}"
         exit 1
     fi
     
+    # Verify repository was cloned successfully
+    if [[ ! -f "$ENTERPRISE_PATH/README.md" ]] && [[ ! -d "$ENTERPRISE_PATH/.git" ]]; then
+        log "ERROR" "Repository directory exists but appears incomplete"
+        log "ERROR" "Path: $ENTERPRISE_PATH"
+        rm -rf "$ENTERPRISE_PATH"
+        exit 1
+    fi
+    
+    log "SUCCESS" "Enterprise repository cloned successfully"
+    
     # Set permissions to odoo user
     log "INFO" "Setting ownership to $ODOO_USER..."
-    chown -R "$ODOO_USER:$ODOO_USER" "$ENTERPRISE_PATH"
-    chmod -R 755 "$ENTERPRISE_PATH"
+    
+    if ! chown -R "$ODOO_USER:$ODOO_USER" "$ENTERPRISE_PATH" 2>/dev/null; then
+        log "ERROR" "Failed to set ownership to $ODOO_USER"
+        log "ERROR" "Path: $ENTERPRISE_PATH"
+        exit 1
+    fi
+    
+    if ! chmod -R 755 "$ENTERPRISE_PATH" 2>/dev/null; then
+        log "ERROR" "Failed to set permissions"
+        exit 1
+    fi
     
     log "SUCCESS" "Permissions set correctly"
 }
@@ -323,9 +361,27 @@ clone_enterprise() {
 update_odoo_config() {
     log "INFO" "Updating Odoo configuration..."
     
+    # Verify Enterprise directory exists before updating config
+    if [[ ! -d "$ENTERPRISE_PATH" ]]; then
+        log "ERROR" "Enterprise directory does not exist: $ENTERPRISE_PATH"
+        log "ERROR" "Cannot update configuration without Enterprise repository"
+        exit 1
+    fi
+    
+    # Verify it's a valid git repository
+    if [[ ! -d "$ENTERPRISE_PATH/.git" ]] && [[ ! -f "$ENTERPRISE_PATH/README.md" ]]; then
+        log "ERROR" "Enterprise directory exists but appears to be incomplete"
+        log "ERROR" "Path: $ENTERPRISE_PATH"
+        exit 1
+    fi
+    
     # Backup configuration
     local config_backup="${ODOO_CONFIG}.backup.$(date +%Y%m%d-%H%M%S)"
-    cp "$ODOO_CONFIG" "$config_backup"
+    if ! cp "$ODOO_CONFIG" "$config_backup" 2>/dev/null; then
+        log "ERROR" "Failed to backup Odoo configuration"
+        log "ERROR" "Config file: $ODOO_CONFIG"
+        exit 1
+    fi
     log "INFO" "Configuration backed up to: $config_backup"
     
     # Check if enterprise is already in addons_path
@@ -339,6 +395,7 @@ update_odoo_config() {
     
     if [[ -z "$current_addons" ]]; then
         log "ERROR" "Could not find addons_path in configuration"
+        log "ERROR" "Config file: $ODOO_CONFIG"
         exit 1
     fi
     
@@ -346,7 +403,12 @@ update_odoo_config() {
     local new_addons="$ENTERPRISE_PATH,$current_addons"
     
     # Update configuration
-    sed -i "s|^addons_path.*|addons_path = $new_addons|" "$ODOO_CONFIG"
+    if ! sed -i "s|^addons_path.*|addons_path = $new_addons|" "$ODOO_CONFIG" 2>/dev/null; then
+        log "ERROR" "Failed to update Odoo configuration"
+        log "INFO" "Restoring backup..."
+        cp "$config_backup" "$ODOO_CONFIG"
+        exit 1
+    fi
     
     log "SUCCESS" "Configuration updated"
     log "INFO" "New addons_path: $new_addons"
@@ -356,19 +418,41 @@ update_odoo_config() {
 restart_odoo() {
     log "INFO" "Restarting Odoo service..."
     
+    # Check if service exists
+    if ! systemctl list-unit-files | grep -q "^odoo.service"; then
+        log "ERROR" "Odoo service not found"
+        log "ERROR" "Please ensure Odoo is installed correctly"
+        exit 1
+    fi
+    
     if ! systemctl is-active --quiet odoo 2>/dev/null; then
         log "WARN" "Odoo service is not running"
         log "INFO" "Starting Odoo service..."
     fi
     
-    systemctl restart odoo
+    # Restart the service
+    if ! systemctl restart odoo 2>/dev/null; then
+        log "ERROR" "Failed to restart Odoo service"
+        log "INFO" "Checking service status..."
+        systemctl status odoo --no-pager -l
+        log "ERROR" "Check logs: sudo journalctl -u odoo -f"
+        exit 1
+    fi
+    
+    # Wait for service to start
+    log "INFO" "Waiting for Odoo to start..."
     sleep 5
     
+    # Verify service is running
     if systemctl is-active --quiet odoo; then
         log "SUCCESS" "Odoo service is running"
     else
         log "ERROR" "Odoo failed to start"
-        log "INFO" "Check logs: sudo journalctl -u odoo -f"
+        echo
+        echo -e "${RED}${BOLD}Service Status:${NC}"
+        systemctl status odoo --no-pager -l
+        echo
+        log "ERROR" "Check logs: sudo journalctl -u odoo -f"
         exit 1
     fi
 }
