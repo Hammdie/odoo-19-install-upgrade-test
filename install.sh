@@ -1722,7 +1722,7 @@ handle_error() {
     exit $exit_code
 }
 
-ja, beides# Main execution
+# Main execution
 main() {
     # Set error handler
     trap 'handle_error $LINENO' ERR
