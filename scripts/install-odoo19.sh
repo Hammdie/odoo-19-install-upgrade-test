@@ -144,15 +144,15 @@ remove_system_odoo_packages() {
 
     if dpkg -l | grep -q '^ii\s\+odoo'; then
         log "WARN" "Removing distro Odoo packages (odoo, odoo-*)"
-        apt-get remove -y --purge 'odoo' 'odoo-*' 2>&1 | tee -a "$LOG_FILE" || true
+        apt-get -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" -y remove --purge 'odoo' 'odoo-*' 2>&1 | tee -a "$LOG_FILE" || true
     fi
 
     if dpkg -l | grep -q '^ii\s\+python3-odoo'; then
         log "WARN" "Removing distro python3-odoo package"
-        apt-get remove -y --purge python3-odoo 2>&1 | tee -a "$LOG_FILE" || true
+        apt-get -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" -y remove --purge python3-odoo 2>&1 | tee -a "$LOG_FILE" || true
     fi
 
-    apt-get autoremove -y 2>&1 | tee -a "$LOG_FILE" || true
+    apt-get -o Dpkg::Options::="--force-confnew" -o Dpkg::Options::="--force-confdef" -y autoremove 2>&1 | tee -a "$LOG_FILE" || true
 }
 
 # Remove previously installed dependencies to ensure a clean reinstall
