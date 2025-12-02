@@ -120,12 +120,15 @@ show_fixes_menu() {
         echo -e "  ${GREEN}8)${NC} Test Cron Jobs"
         echo -e "     Verify automated tasks are configured correctly"
         echo
+        echo -e "  ${GREEN}9)${NC} Check Odoo Version & Status"
+        echo -e "     Display installed Odoo version and Enterprise status"
+        echo
         echo -e "  ${RED}0)${NC} Back to Main Menu"
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-8]: "${NC})" fix_choice
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-9]: "${NC})" fix_choice
         
         case $fix_choice in
             1)
@@ -232,13 +235,26 @@ show_fixes_menu() {
                 echo
                 read -p "Press Enter to continue..."
                 ;;
+            9)
+                echo
+                echo -e "${YELLOW}Odoo Version & Status Check${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                if [[ -f "$PROJECT_ROOT/check-odoo-version.sh" ]]; then
+                    bash "$PROJECT_ROOT/check-odoo-version.sh"
+                else
+                    echo -e "${RED}Error: check-odoo-version.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
             0)
                 show_banner
                 return 0
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-8.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-9.${NC}"
                 sleep 2
                 ;;
         esac
