@@ -461,6 +461,71 @@ setup_database() {
     log "SUCCESS" "Database setup completed"
 }
 
+# Setup PostgreSQL for localhost trust authentication
+setup_postgres_trust() {
+    log "INFO" "Configuring PostgreSQL for localhost trust authentication..."
+    
+    # Find PostgreSQL version
+    local pg_version=$(sudo -u postgres psql -t -c "SHOW server_version;" 2>/dev/null | grep -o '[0-9]*' | head -n1)
+    if [[ -z "$pg_version" ]]; then
+        pg_version=$(ls /etc/postgresql/ 2>/dev/null | head -n1)
+    fi
+    
+    if [[ -z "$pg_version" ]]; then
+        log "WARN" "Could not detect PostgreSQL version - skipping trust configuration"
+        return 0
+    fi
+    
+    local pg_hba_file="/etc/postgresql/$pg_version/main/pg_hba.conf"
+    
+    if [[ ! -f "$pg_hba_file" ]]; then
+        log "WARN" "pg_hba.conf not found at $pg_hba_file - skipping trust configuration"
+        return 0
+    fi
+    
+    log "INFO" "Found PostgreSQL $pg_version at $pg_hba_file"
+    
+    # Backup pg_hba.conf
+    cp "$pg_hba_file" "${pg_hba_file}.backup.$(date +%Y%m%d-%H%M%S)"
+    
+    # Create trust configuration
+    cat > "$pg_hba_file" << 'EOF'
+# PostgreSQL Client Authentication Configuration
+# Configured for localhost trust (no password)
+# 
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+#
+# Lokale Verbindungen ohne Passwort (trust)
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+
+# Externe Verbindungen BLOCKIERT (reject)
+host    all             all             0.0.0.0/0               reject
+EOF
+    
+    log "SUCCESS" "PostgreSQL configured for localhost trust authentication"
+    
+    # Reload PostgreSQL
+    systemctl reload postgresql 2>/dev/null || true
+    log "SUCCESS" "PostgreSQL configuration reloaded"
+    
+    # Update odoo.conf for trust authentication
+    sed -i 's/^db_host.*/db_host = localhost/' "$ODOO_CONFIG"
+    sed -i 's/^db_port.*/db_port = 5432/' "$ODOO_CONFIG"
+    sed -i 's/^db_user.*/db_user = odoo/' "$ODOO_CONFIG"
+    sed -i 's/^db_password.*/db_password = False/' "$ODOO_CONFIG"
+    
+    log "SUCCESS" "Odoo configuration updated for trust authentication"
+    
+    # Test connection
+    if psql -h localhost -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
+        log "SUCCESS" "PostgreSQL trust authentication verified"
+    else
+        log "WARN" "PostgreSQL trust authentication test failed - may need manual configuration"
+    fi
+}
+
 # Create systemd service
 create_systemd_service() {
     log "INFO" "Creating systemd service for Odoo..."
@@ -619,9 +684,14 @@ show_summary() {
     log "INFO" "Service Status: $(systemctl is-active odoo)"
     log "INFO" "Web Interface: http://localhost:8069"
     log "INFO" ""
+    log "INFO" "PostgreSQL Configuration:"
+    log "INFO" "- Localhost: trust (no password required)"
+    log "INFO" "- External: blocked (reject)"
+    log "INFO" "- Test: psql -h localhost -U odoo -d postgres"
+    log "INFO" ""
     log "INFO" "Next Steps:"
     log "INFO" "1. Access Odoo at http://your-server-ip:8069"
-    log "INFO" "2. Create your first database"
+    log "INFO" "2. Create your first database (no password needed)"
     log "INFO" "3. Configure your Odoo instance"
     log "INFO" "4. Run setup-cron.sh for automatic updates"
     log "INFO" ""
@@ -649,6 +719,7 @@ main() {
     install_odoo_package
     create_odoo_config
     setup_database
+    setup_postgres_trust
     setup_custom_addons
     create_systemd_service
     setup_log_rotation
