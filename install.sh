@@ -319,7 +319,7 @@ usage() {
     echo -e "    ${GREEN}3. Cron Setup${NC}               - Configure automated updates"
     echo -e "    ${GREEN}4. Nginx + SSL Setup${NC}        - Reverse proxy with Let's Encrypt (optional)"
     echo -e "    ${GREEN}5. Enterprise Edition${NC}       - Install Odoo Enterprise addons (optional)"
-    echo -e "    ${GREEN}6. Full Installation${NC}        - Run all steps automatically"
+    echo -e "    ${GREEN}6. Full Installation${NC}        - Run all steps (incl. pgvector for AI/RAG)"
     echo -e "    ${GREEN}7. Exit${NC}                     - Cancel installation"
     echo
     echo -e "${BOLD}OPTIONS:${NC}"
@@ -556,7 +556,7 @@ show_interactive_menu() {
         echo -e "     Install Odoo Enterprise addons (requires partner access)"
         echo
         echo -e "  ${YELLOW}6)${NC} ${BOLD}Full Installation${NC}"
-        echo -e "     Run all steps automatically (recommended)"
+        echo -e "     Run all steps automatically (incl. pgvector for AI/RAG)"
         echo
         echo -e "  ${YELLOW}7)${NC} ${BOLD}Show Help${NC}"
         echo -e "     Display detailed usage information"
@@ -655,9 +655,10 @@ show_interactive_menu() {
                 echo -e "${GREEN}This will run all installation steps:${NC}"
                 echo -e "  1. System Upgrade"
                 echo -e "  2. Odoo Installation"
-                echo -e "  3. Cron Setup"
-                echo -e "  4. Nginx + SSL Setup (optional)"
-                echo -e "  5. Enterprise Edition (optional)"
+                echo -e "  3. pgvector Extension (AI/RAG support)"
+                echo -e "  4. Cron Setup"
+                echo -e "  5. Nginx + SSL Setup (optional)"
+                echo -e "  6. Enterprise Edition (optional)"
                 echo
                 
                 # Ask for Nginx/SSL setup
@@ -2152,6 +2153,20 @@ main() {
     if ! run_odoo_installation; then
         log "ERROR" "Odoo installation failed"
         exit 1
+    fi
+    
+    # Install pgvector extension for AI/RAG support
+    log "INFO" "Installing PostgreSQL pgvector extension for AI/RAG support..."
+    if [[ -f "$PROJECT_ROOT/scripts/install-pgvector.sh" ]]; then
+        if bash "$PROJECT_ROOT/scripts/install-pgvector.sh" 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "pgvector extension installed successfully"
+        else
+            log "WARN" "pgvector installation failed - continuing without AI/RAG support"
+            log "INFO" "You can install it later from Fixes & Patches menu (Option 11)"
+        fi
+    else
+        log "WARN" "pgvector installation script not found - skipping"
+        log "INFO" "Script location: $PROJECT_ROOT/scripts/install-pgvector.sh"
     fi
     
     if ! run_cron_setup; then
