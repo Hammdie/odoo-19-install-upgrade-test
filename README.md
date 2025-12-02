@@ -462,6 +462,7 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 | **`test-odoo-user-permissions.sh`** | **Testet odoo-Benutzer Datenbankberechtigungen** | **1.1.0** |
 | **`scripts/set-postgres-password.sh`** | **Setzt PostgreSQL-Passwort für odoo-Benutzer** | **1.1.0** |
 | **`scripts/install-pgvector.sh`** | **Installiert pgvector Extension für AI/RAG** | **1.2.0** |
+| **`fix-phonenumbers.sh`** | **Installiert python3-phonenumbers für account_peppol** | **1.2.0** |
 
 ## Ordnerstruktur
 
@@ -633,6 +634,27 @@ sudo systemctl restart postgresql
    sudo chown -R odoo:odoo /opt/odoo
    sudo chmod +x scripts/*.sh
    ```
+
+9. **Modul-Installation fehlgeschlagen: "phonenumbers" fehlt:**
+   ```bash
+   # Fehler: "Es ist nicht möglich das Modul 'account_peppol' zu installieren,
+   #          da eine Abhängigkeit nicht erfüllt ist: phonenumbers"
+   
+   # Schnelle Lösung:
+   sudo apt install python3-phonenumbers
+   sudo systemctl restart odoo
+   
+   # Oder über Fixes-Menü:
+   sudo ./install.sh
+   # → Option 5: Fixes & Patches
+   # → Option 12: Fix phonenumbers Module
+   
+   # Oder direkt:
+   sudo ./fix-phonenumbers.sh
+   ```
+   
+   **Betroffene Module:** `account_peppol`, `phone_validation`, und andere Module 
+   die internationale Telefonnummer-Validierung benötigen.
 
 ### Reparatur-Scripts für Produktionsumgebungen
 

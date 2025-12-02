@@ -121,6 +121,7 @@ update_system() {
         "python3-pip"
         "python3-dev"
         "python3-venv"
+        "python3-phonenumbers"
         "libxml2-dev"
         "libxslt1-dev"
         "zlib1g-dev"

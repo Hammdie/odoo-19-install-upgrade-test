@@ -129,12 +129,15 @@ show_fixes_menu() {
         echo -e "  ${GREEN}11)${NC} Install pgvector for RAG/AI"
         echo -e "      Add PostgreSQL vector extension for AI agents"
         echo
+        echo -e "  ${GREEN}12)${NC} Fix phonenumbers Module"
+        echo -e "      Install python3-phonenumbers for account_peppol"
+        echo
         echo -e "  ${RED}0)${NC} Back to Main Menu"
         echo
         echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo
         
-        read -p "$(echo -e ${BOLD}"Enter your choice [0-11]: "${NC})" fix_choice
+        read -p "$(echo -e ${BOLD}"Enter your choice [0-12]: "${NC})" fix_choice
         
         case $fix_choice in
             1)
@@ -285,13 +288,31 @@ show_fixes_menu() {
                 echo
                 read -p "Press Enter to continue..."
                 ;;
+            12)
+                echo
+                echo -e "${YELLOW}Fix phonenumbers Module${NC}"
+                echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo
+                echo -e "${GREEN}About phonenumbers:${NC}"
+                echo "Python library for parsing, formatting, and validating phone numbers"
+                echo "Required for account_peppol and other Odoo modules"
+                echo "Fixes error: 'Abhängigkeit nicht erfüllt: phonenumbers'"
+                echo
+                if [[ -f "$PROJECT_ROOT/fix-phonenumbers.sh" ]]; then
+                    bash "$PROJECT_ROOT/fix-phonenumbers.sh"
+                else
+                    echo -e "${RED}Error: fix-phonenumbers.sh not found${NC}"
+                fi
+                echo
+                read -p "Press Enter to continue..."
+                ;;
             0)
                 show_banner
                 return 0
                 ;;
             *)
                 echo
-                echo -e "${RED}Invalid option. Please select 0-11.${NC}"
+                echo -e "${RED}Invalid option. Please select 0-12.${NC}"
                 sleep 2
                 ;;
         esac
