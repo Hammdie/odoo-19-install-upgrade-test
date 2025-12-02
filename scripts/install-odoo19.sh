@@ -18,6 +18,12 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # GitHub repository for Odoo
 ODOO_REPO="https://github.com/odoo/odoo.git"
 
+# Pip options (Ubuntu/Debian enforce Externally Managed Env)
+declare -a PIP_INSTALL_ARGS
+if python3 -m pip --help 2>&1 | grep -q -- "--break-system-packages"; then
+    PIP_INSTALL_ARGS+=("--break-system-packages")
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -133,15 +139,20 @@ download_odoo() {
 install_odoo_dependencies() {
     log "INFO" "Installing Odoo Python dependencies..."
     
+    # Ensure pip tooling is up to date to avoid build quirks
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --upgrade pip wheel setuptools 2>&1 | tee -a "$LOG_FILE"
+
     # Install from Odoo requirements.txt
     if [[ -f "$ODOO_HOME/odoo/requirements.txt" ]]; then
-        python3 -m pip install -r "$ODOO_HOME/odoo/requirements.txt" 2>&1 | tee -a "$LOG_FILE"
+        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" -r "$ODOO_HOME/odoo/requirements.txt" 2>&1 | tee -a "$LOG_FILE"
+    else
+        log "WARN" "requirements.txt not found in Odoo source tree"
     fi
     
     # Install additional common dependencies
     local additional_deps=(
         "psycopg2-binary"
-        "pyldap"
+        "python-ldap"
         "qrcode"
         "vobject"
         "werkzeug"
@@ -149,7 +160,7 @@ install_odoo_dependencies() {
     
     for dep in "${additional_deps[@]}"; do
         log "INFO" "Installing $dep..."
-        python3 -m pip install "$dep" 2>&1 | tee -a "$LOG_FILE"
+        python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$dep" 2>&1 | tee -a "$LOG_FILE"
     done
 }
 
