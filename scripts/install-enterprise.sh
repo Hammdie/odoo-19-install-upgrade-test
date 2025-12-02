@@ -583,6 +583,9 @@ show_summary() {
 
 # Main function
 main() {
+    # Exit on error
+    set -e
+    
     # Create log directory
     create_log_dir
     
@@ -603,16 +606,28 @@ main() {
     check_existing_installation
     
     # Setup SSH
-    setup_ssh_key
+    setup_ssh_key || {
+        log "ERROR" "SSH setup failed or was cancelled"
+        exit 1
+    }
     
     # Clone Enterprise
-    clone_enterprise
+    clone_enterprise || {
+        log "ERROR" "Failed to clone Enterprise repository"
+        exit 1
+    }
     
     # Update configuration
-    update_odoo_config
+    update_odoo_config || {
+        log "ERROR" "Failed to update Odoo configuration"
+        exit 1
+    }
     
     # Restart Odoo
-    restart_odoo
+    restart_odoo || {
+        log "ERROR" "Failed to restart Odoo service"
+        exit 1
+    }
     
     # Show summary
     show_summary

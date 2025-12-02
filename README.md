@@ -854,6 +854,120 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 | `test-odoo-user-permissions.sh` | Testet odoo-Benutzer Datenbankberechtigungen |
 | `scripts/set-postgres-password.sh` | Setzt PostgreSQL-Passwort für odoo-Benutzer |
 
+## Server-Setup & Git-Konfiguration
+
+### Problem: Git-Konflikte beim Update
+
+Beim `git pull` auf dem Server erscheint häufig:
+```
+error: Your local changes to the following files would be overwritten by merge:
+	scripts/install-enterprise.sh
+Please commit your changes or stash them before you merge.
+```
+
+**Ursache:** Git erkennt Line-Ending-Änderungen (CRLF vs LF) oder Dateirechte-Änderungen (chmod), obwohl das Script sich nicht selbst ändert.
+
+### Lösung: Einmalige Git-Konfiguration auf dem Server
+
+```bash
+# Auf dem Server ausführen
+cd /var/odoo-upgrade-cron
+
+# Line-Ending-Konvertierung deaktivieren
+git config core.autocrlf false
+
+# Dateirechte-Änderungen ignorieren
+git config core.fileMode false
+
+# Konfiguration prüfen
+git config --list | grep -E "autocrlf|fileMode"
+# Erwartete Ausgabe:
+# core.autocrlf=false
+# core.filemode=false
+```
+
+### Bestehende Änderungen verwerfen und Repository aktualisieren
+
+```bash
+cd /var/odoo-upgrade-cron
+
+# Alle lokalen Änderungen verwerfen
+git reset --hard origin/main
+
+# Neueste Version holen
+git pull
+
+# Scripts ausführbar machen
+chmod +x *.sh scripts/*.sh
+```
+
+### Schnell-Befehl (Copy & Paste für Server)
+
+```bash
+cd /var/odoo-upgrade-cron && \
+git config core.autocrlf false && \
+git config core.fileMode false && \
+git reset --hard origin/main && \
+git pull && \
+chmod +x *.sh scripts/*.sh && \
+echo "✓ Repository aktualisiert und bereit!"
+```
+
+### Bei jedem Update (wenn Installation abgebrochen wurde)
+
+Wenn Sie das Enterprise-Script abbrechen (Ctrl+C) und dann updaten möchten:
+
+```bash
+cd /var/odoo-upgrade-cron
+
+# Methode 1: Nur eine Datei zurücksetzen
+git checkout scripts/install-enterprise.sh
+git pull
+
+# Methode 2: Alles zurücksetzen (empfohlen)
+git reset --hard origin/main
+git pull
+```
+
+### Git-Konfiguration global setzen (optional)
+
+Falls Sie das für ALLE Repositories auf dem Server wollen:
+
+```bash
+git config --global core.autocrlf false
+git config --global core.fileMode false
+```
+
+**Hinweis:** Dies beeinflusst alle Git-Repositories auf dem System.
+
+### Troubleshooting
+
+**Problem: "git pull" zeigt immer noch Änderungen**
+
+```bash
+# Prüfen was genau geändert wurde
+git diff scripts/install-enterprise.sh
+
+# Häufige Ursachen:
+# - Line endings: ^M am Zeilenende
+# - File mode: old mode 100644, new mode 100755
+
+# Lösung: Hard reset
+git reset --hard HEAD
+git pull
+```
+
+**Problem: Script wird als "geändert" erkannt ohne Änderungen**
+
+```bash
+# Prüfen ob fileMode das Problem ist
+git diff --summary
+
+# Wenn "mode change" erscheint:
+git config core.fileMode false
+git reset --hard HEAD
+```
+
 ### Version 1.0.0 (2025-11-14)
 - Initiale Version
 - Odoo 19.0 Upgrade-Scripts
