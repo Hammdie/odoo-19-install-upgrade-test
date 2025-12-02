@@ -440,24 +440,63 @@ show_summary() {
 
 # Main execution
 main() {
-    # Parameter-Validierung
-    if [[ $# -lt 1 ]]; then
-        log_error "Unzureichende Parameter"
-        echo "Usage: $0 <domain> [email] [--no-backup]"
-        echo ""
-        echo "Examples:"
-        echo "  sudo $0 kh-dud.radiq.de"
-        echo "  sudo $0 kh-dud.radiq.de admin@example.com"
-        echo "  sudo $0 kh-dud.radiq.de admin@example.com --no-backup"
-        exit 1
-    fi
-    
-    DOMAIN="$1"
-    EMAIL="${2:-admin@${DOMAIN}}"
-    
     log_info "════════════════════════════════════════"
     log_info "  Odoo Nginx Reverse Proxy Setup"
     log_info "════════════════════════════════════════"
+    echo
+    
+    # Interaktiver Modus wenn keine Parameter angegeben
+    if [[ $# -lt 1 ]]; then
+        log_info "Interaktiver Modus - Bitte geben Sie die Informationen ein"
+        echo
+        
+        # Domain abfragen
+        while true; do
+            read -p "$(echo -e ${BLUE}Odoo Domain${NC}) (z.B. odoo.example.com): " DOMAIN
+            if [[ -n "$DOMAIN" ]]; then
+                if [[ $DOMAIN =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.([a-zA-Z]{2,})$ ]]; then
+                    break
+                else
+                    log_error "Ungültige Domain. Bitte versuchen Sie es erneut."
+                fi
+            else
+                log_error "Domain ist erforderlich."
+            fi
+        done
+        
+        # Email abfragen
+        read -p "$(echo -e ${BLUE}Let\'s Encrypt Email${NC}) (Standard: admin@$DOMAIN): " EMAIL
+        EMAIL="${EMAIL:-admin@${DOMAIN}}"
+        
+        # Backup-Option abfragen
+        echo
+        read -p "$(echo -e ${BLUE}Backup der aktuellen Nginx-Konfiguration erstellen?${NC}) (Y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            NO_BACKUP="--no-backup"
+        else
+            NO_BACKUP=""
+        fi
+        
+        echo
+        log_info "Konfiguration:"
+        echo -e "  Domain: ${GREEN}$DOMAIN${NC}"
+        echo -e "  Email:  ${GREEN}$EMAIL${NC}"
+        echo -e "  Backup: ${GREEN}$([ -z "$NO_BACKUP" ] && echo "Ja" || echo "Nein")${NC}"
+        echo
+        read -p "$(echo -e ${YELLOW}Fortfahren mit der Installation?${NC}) (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_warn "Installation abgebrochen"
+            exit 0
+        fi
+    else
+        # Parameter-Modus
+        DOMAIN="$1"
+        EMAIL="${2:-admin@${DOMAIN}}"
+    fi
+    
+    echo
     
     # Validierung
     validate_domain "$DOMAIN"

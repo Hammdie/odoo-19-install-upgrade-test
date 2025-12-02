@@ -244,12 +244,13 @@ setup_ssh_key() {
     echo -e "  ${GREEN}0)${NC} Test GitHub & Enterprise repository connection"
     echo -e "  ${GREEN}1)${NC} Show my public SSH key to add to GitHub"
     echo -e "  ${GREEN}2)${NC} Generate new ED25519 SSH key and show public key"
-    echo -e "  ${GREEN}3)${NC} Skip SSH check and try to clone anyway"
-    echo -e "  ${RED}4)${NC} Cancel installation"
+    echo -e "  ${GREEN}3)${NC} Add GitHub to SSH known_hosts (fix host key verification)"
+    echo -e "  ${GREEN}4)${NC} Skip SSH check and try to clone anyway"
+    echo -e "  ${RED}5)${NC} Cancel installation"
     echo
     
     while true; do
-        read -p "Select option [0-4]: " choice
+        read -p "Select option [0-5]: " choice
         case $choice in
             0)
                 # Test GitHub authentication
