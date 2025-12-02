@@ -423,25 +423,34 @@ setup_database() {
 create_systemd_service() {
     log "INFO" "Creating systemd service for Odoo..."
     
+    # Odoo 19.0 no longer supports --daemon, use Type=simple instead of forking
     cat > /etc/systemd/system/odoo.service << EOF
 [Unit]
-Description=Odoo
+Description=Odoo 19.0
 Documentation=http://www.odoo.com
 Requires=postgresql.service
 After=network.target postgresql.service
 
 [Service]
-Type=forking
+Type=simple
 User=$ODOO_USER
-ExecStart=$ODOO_HOME/odoo/odoo-bin -c $ODOO_CONFIG --pidfile=/var/run/odoo/odoo.pid --daemon
+Group=$ODOO_USER
+ExecStart=$ODOO_HOME/odoo/odoo-bin -c $ODOO_CONFIG
 ExecReload=/bin/kill -s HUP \$MAINPID
-PIDFile=/var/run/odoo/odoo.pid
+Restart=on-failure
+RestartSec=5
 KillMode=mixed
+TimeoutStopSec=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=odoo
 
 # Security settings
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/log/odoo /var/run/odoo $ODOO_HOME
+ReadWritePaths=/var/log/odoo $ODOO_HOME /tmp
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
@@ -450,13 +459,13 @@ PrivateDevices=true
 WantedBy=multi-user.target
 EOF
 
-    # Create PID directory
-    mkdir -p /var/run/odoo
-    chown "$ODOO_USER:$ODOO_USER" /var/run/odoo
+    # Create log directory
+    mkdir -p /var/log/odoo
+    chown "$ODOO_USER:$ODOO_USER" /var/log/odoo
     
-    # Create tmpfiles.d configuration
+    # Create tmpfiles.d configuration (no longer need PID directory for Type=simple)
     cat > /etc/tmpfiles.d/odoo.conf << EOF
-d /var/run/odoo 0755 $ODOO_USER $ODOO_USER -
+d /var/log/odoo 0755 $ODOO_USER $ODOO_USER -
 EOF
     
     # Reload systemd
