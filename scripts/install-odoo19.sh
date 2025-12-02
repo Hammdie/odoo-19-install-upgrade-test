@@ -18,6 +18,9 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # GitHub repository for Odoo
 ODOO_REPO="https://github.com/odoo/odoo.git"
 
+# Ensure apt runs non-interactively when invoked
+export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
+
 # Pip options (Ubuntu/Debian enforce Externally Managed Env)
 declare -a PIP_INSTALL_ARGS
 if python3 -m pip --help 2>&1 | grep -q -- "--break-system-packages"; then
@@ -135,6 +138,23 @@ download_odoo() {
     log "SUCCESS" "Odoo $ODOO_VERSION downloaded successfully"
 }
 
+# Remove distro-provided Odoo packages to avoid mixing versions
+remove_system_odoo_packages() {
+    log "INFO" "Checking for system Odoo packages..."
+
+    if dpkg -l | grep -q '^ii\s\+odoo'; then
+        log "WARN" "Removing distro Odoo packages (odoo, odoo-*)"
+        apt-get remove -y --purge 'odoo' 'odoo-*' 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+
+    if dpkg -l | grep -q '^ii\s\+python3-odoo'; then
+        log "WARN" "Removing distro python3-odoo package"
+        apt-get remove -y --purge python3-odoo 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+
+    apt-get autoremove -y 2>&1 | tee -a "$LOG_FILE" || true
+}
+
 # Remove previously installed dependencies to ensure a clean reinstall
 purge_odoo_dependencies() {
     log "INFO" "Removing previously installed Odoo Python dependencies..."
@@ -170,6 +190,7 @@ purge_odoo_dependencies() {
         "qrcode"
         "vobject"
         "werkzeug"
+        "lxml"
     )
 
     for pkg in "${extra_packages[@]}"; do
@@ -199,6 +220,9 @@ install_odoo_dependencies() {
     else
         log "WARN" "requirements.txt not found in Odoo source tree"
     fi
+
+    # Ensure compatible lxml version (<5 retains html.clean.defs expected by Odoo)
+    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --upgrade "lxml<5" 2>&1 | tee -a "$LOG_FILE"
     
     # Install additional common dependencies
     local additional_deps=(
@@ -492,6 +516,7 @@ main() {
     check_root
     check_prerequisites
     stop_odoo_service
+    remove_system_odoo_packages
     purge_odoo_dependencies
     download_odoo
     purge_odoo_dependencies
