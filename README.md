@@ -1,4 +1,4 @@
-# Odoo Install/Auto-Upgrade/Test
+# Odoo 19 Install/Upgrade/Test
 
 Ein umfassendes Script-Repository für die automatisierte Installation, Aktualisierung und Wartung von Odoo 19.0 Installationen auf Ubuntu-Servern.
 
