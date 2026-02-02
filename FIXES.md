@@ -69,6 +69,17 @@ else
 fi
 ```
 
+### 5. Custom Addons Pfad-Problem
+**Problem:** Custom addons wurden in `/var/custom-addons` erwartet, aber die Installation erstellte `/var/odoo_addons`.
+
+**Ursache:** Inkonsistenz zwischen erwarteten und tatsächlich erstellten Verzeichnissen.
+
+**Lösung:** Aktualisierung aller Skripte und Konfigurationen auf `/var/odoo_addons`:
+- `scripts/install-odoo19.sh` - Verzeichniserstellung 
+- `config/odoo.conf.example` - addons_path Konfiguration
+- `README.md` - Dokumentation und Beispiele
+- `install.sh` - Ausgabemeldungen
+
 ## 🧪 Validierung
 
 Das `test-fixes.sh` Skript validiert alle Reparaturen:
@@ -83,6 +94,7 @@ Das `test-fixes.sh` Skript validiert alle Reparaturen:
 3. ✅ Verwendung von `python3 -m odoo` statt `odoo-bin`
 4. ✅ zope.event und zope.interface in Dependencies
 5. ✅ Nginx-Setup behandelt nicht-interaktive Umgebungen
+6. ✅ Custom addons verwenden korrekten `/var/odoo_addons` Pfad
 
 ## 🚀 Verbesserte Robustheit
 
@@ -91,12 +103,14 @@ Das `test-fixes.sh` Skript validiert alle Reparaturen:
 - Service startete nicht wegen falscher Pfade
 - Dependencies-Konflikte mit zope-Paketen
 - Skripte hingen in automatisierten Umgebungen fest
+- Custom addons wurden im falschen Verzeichnis erwartet
 
 **Nach den Fixes:**
 - Sichere String-Behandlung in allen sed-Operationen
 - Robuster systemd Service mit korrektem Python-Umgebung
 - Vollständige Dependencies mit expliziten zope-Paketen
 - Funktioniert sowohl interaktiv als auch automatisiert
+- Custom addons im korrekten `/var/odoo_addons` Verzeichnis
 
 ## 🔄 Anwendung auf dem Server
 
