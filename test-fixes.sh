@@ -53,6 +53,15 @@ else
     exit 1
 fi
 
+# Test 6: Custom addons path
+echo "✅ Test 6: Checking custom addons path..."
+if grep -q "/var/odoo_addons" scripts/install-odoo19.sh && grep -q "/var/odoo_addons" config/odoo.conf.example; then
+    echo "✅ Custom addons use /var/odoo_addons path"
+else
+    echo "❌ Custom addons path not updated to /var/odoo_addons"
+    exit 1
+fi
+
 echo "========================="
 echo "🎉 All tests passed! The fixes are working correctly."
 echo ""
@@ -61,4 +70,5 @@ echo "- sed commands now use safe delimiters (| instead of /)"
 echo "- systemd service uses python3 -m odoo with WorkingDirectory"
 echo "- zope.event and zope.interface included in dependencies"
 echo "- Nginx setup handles non-interactive environments"
+echo "- Custom addons use correct /var/odoo_addons path"
 echo "- Service is more robust and compatible"

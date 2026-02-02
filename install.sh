@@ -393,7 +393,7 @@ usage() {
     echo "    ✓ Automated weekly updates via cron jobs"
     echo "    ✓ Optional Nginx reverse proxy with Let's Encrypt SSL"
     echo "    ✓ Optional Odoo Enterprise edition support"
-    echo "    ✓ Custom addons directories: /opt/odoo/custom-addons, /var/custom-addons"
+    echo "    ✓ Custom addons directories: /opt/odoo/custom-addons, /var/odoo_addons"
     echo "    ✓ Comprehensive logging and error handling"
     echo
     echo -e "${BOLD}REQUIREMENTS:${NC}"

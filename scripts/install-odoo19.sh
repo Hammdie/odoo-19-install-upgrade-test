@@ -141,11 +141,11 @@ download_odoo() {
     # Create custom addons directories
     log "INFO" "Creating custom addons directories..."
     mkdir -p "$ODOO_HOME/custom-addons"
-    mkdir -p "/var/custom-addons"
+    mkdir -p "/var/odoo_addons"
     chown -R "$ODOO_USER:$ODOO_USER" "$ODOO_HOME/custom-addons"
-    chown -R "$ODOO_USER:$ODOO_USER" "/var/custom-addons"
+    chown -R "$ODOO_USER:$ODOO_USER" "/var/odoo_addons"
     chmod -R 755 "$ODOO_HOME/custom-addons"
-    chmod -R 755 "/var/custom-addons"
+    chmod -R 755 "/var/odoo_addons"
     
     # Set permissions
     chown -R "$ODOO_USER:$ODOO_USER" "$ODOO_HOME/odoo"
@@ -376,7 +376,7 @@ admin_passwd = $admin_password
 db_host = localhost
 db_port = 5432
 db_user = $ODOO_USER
-addons_path = $ODOO_HOME/odoo/addons,$ODOO_HOME/enterprise,$ODOO_HOME/custom-addons,/var/custom-addons
+addons_path = $ODOO_HOME/odoo/addons,$ODOO_HOME/enterprise,$ODOO_HOME/custom-addons,/var/odoo_addons
 xmlrpc_port = 8069
 logfile = /var/log/odoo/odoo.log
 log_level = info

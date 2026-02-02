@@ -275,7 +275,7 @@ sudo systemctl restart odoo
 sudo nano /etc/odoo/odoo.conf
 
 # addons_path sollte enthalten:
-# addons_path = /opt/odoo/enterprise,/opt/odoo/addons,/opt/odoo/custom-addons,/var/custom-addons
+# addons_path = /opt/odoo/enterprise,/opt/odoo/addons,/opt/odoo/custom-addons,/var/odoo_addons
 
 # Odoo neustarten nach Änderungen
 sudo systemctl restart odoo
@@ -290,19 +290,19 @@ Das Repository erstellt automatisch **zwei Verzeichnisse** für eigene Custom Ad
 - Werden mit dem odoo-Benutzer verwaltet
 - Ideal für versionskontrollierte Module
 
-**2. System-weite Custom Addons:** `/var/custom-addons`
+**2. System-weite Custom Addons:** `/var/odoo_addons`
 - Für externe oder unabhängige Custom Addons
 - Gemeinsam genutzt über mehrere Odoo-Instanzen (falls vorhanden)
 - Ideal für gekaufte oder externe Module
 
 **Custom Addon hinzufügen:**
 ```bash
-# Addon nach /var/custom-addons kopieren
-sudo cp -r /pfad/zu/deinem/custom_module /var/custom-addons/
+# Addon nach /var/odoo_addons kopieren
+sudo cp -r /pfad/zu/deinem/custom_module /var/odoo_addons/
 
 # Berechtigungen setzen
-sudo chown -R odoo:odoo /var/custom-addons/custom_module
-sudo chmod -R 755 /var/custom-addons/custom_module
+sudo chown -R odoo:odoo /var/odoo_addons/custom_module
+sudo chmod -R 755 /var/odoo_addons/custom_module
 
 # Odoo neustarten
 sudo systemctl restart odoo
@@ -317,7 +317,7 @@ sudo systemctl restart odoo
 1. `/opt/odoo/enterprise` - Enterprise Edition (höchste Priorität)
 2. `/opt/odoo/addons` - Odoo Core Module
 3. `/opt/odoo/custom-addons` - Projekt-spezifische Custom Addons
-4. `/var/custom-addons` - System-weite Custom Addons
+4. `/var/odoo_addons` - System-weite Custom Addons
 
 **Hinweis:** Module in Verzeichnissen mit höherer Priorität überschreiben Module mit gleichem Namen in nachfolgenden Verzeichnissen.
 
@@ -325,7 +325,7 @@ sudo systemctl restart odoo
 
 1. **System-Vorbereitung** – Updates, PostgreSQL, Node.js, Python-Dependencies
 2. **Odoo 19.0 Download** – Klont das offizielle Odoo-Repository
-3. **Custom Addons Verzeichnisse** – Erstellt `/opt/odoo/custom-addons` und `/var/custom-addons`
+3. **Custom Addons Verzeichnisse** – Erstellt `/opt/odoo/custom-addons` und `/var/odoo_addons`
 4. **Admin-Passwort Abfrage** – Interaktive Eingabe des Odoo Master-Passworts (min. 8 Zeichen)
 5. **Python-Dependencies** – Installiert alle benötigten Pakete (inkl. lxml < 5.0, passlib, etc.)
 6. **Datenbank-Setup** – Erstellt PostgreSQL-Benutzer und konfiguriert Authentifizierung
@@ -896,7 +896,7 @@ Durch die Verwendung dieser Software akzeptieren Sie diese Bedingungen vollstän
 - **Odoo Enterprise Edition Support:** `--enterprise` Flag für automatische Installation der Enterprise-Addons
 - **Nachträgliche Enterprise-Installation:** Neues Script `install-enterprise.sh` für spätere Enterprise-Installation
 - **Interaktives SSH-Key Setup:** Enterprise-Script bietet 4 Optionen für SSH-Konfiguration (Test, Generierung, Skip, Abbruch)
-- **Custom Addons Verzeichnisse:** Automatische Erstellung von `/opt/odoo/custom-addons` und `/var/custom-addons`
+- **Custom Addons Verzeichnisse:** Automatische Erstellung von `/opt/odoo/custom-addons` und `/var/odoo_addons`
 - **Erweiterte Addons-Pfad Konfiguration:** Unterstützung für Enterprise, Core, Custom Addons mit Prioritätsreihenfolge
 - **Odoo 19.0 Systemd-Anpassung:** `Type=simple` statt `Type=forking` (--daemon entfernt)
 - **Ubuntu 24.04 Kompatibilität:** Automatische Erkennung und Verwendung von `--break-system-packages` für pip
