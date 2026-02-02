@@ -463,9 +463,9 @@ setup_database() {
     log "SUCCESS" "Database setup completed"
 }
 
-# Setup PostgreSQL for localhost trust authentication
-setup_postgres_trust() {
-    log "INFO" "Configuring PostgreSQL for localhost trust authentication..."
+# Setup PostgreSQL for password authentication with odoo user
+setup_postgres_auth() {
+    log "INFO" "Configuring PostgreSQL for password authentication..."
     
     # Find PostgreSQL version
     local pg_version=$(sudo -u postgres psql -t -c "SHOW server_version;" 2>/dev/null | grep -o '[0-9]*' | head -n1)
@@ -474,14 +474,14 @@ setup_postgres_trust() {
     fi
     
     if [[ -z "$pg_version" ]]; then
-        log "WARN" "Could not detect PostgreSQL version - skipping trust configuration"
+        log "WARN" "Could not detect PostgreSQL version - skipping auth configuration"
         return 0
     fi
     
     local pg_hba_file="/etc/postgresql/$pg_version/main/pg_hba.conf"
     
     if [[ ! -f "$pg_hba_file" ]]; then
-        log "WARN" "pg_hba.conf not found at $pg_hba_file - skipping trust configuration"
+        log "WARN" "pg_hba.conf not found at $pg_hba_file - skipping auth configuration"
         return 0
     fi
     
@@ -490,41 +490,46 @@ setup_postgres_trust() {
     # Backup pg_hba.conf
     cp "$pg_hba_file" "${pg_hba_file}.backup.$(date +%Y%m%d-%H%M%S)"
     
-    # Create trust configuration
+    # Create md5 authentication configuration
     cat > "$pg_hba_file" << 'EOF'
 # PostgreSQL Client Authentication Configuration
-# Configured for localhost trust (no password)
+# Configured for password authentication
 # 
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
 #
-# Lokale Verbindungen ohne Passwort (trust)
-local   all             all                                     trust
-host    all             all             127.0.0.1/32            trust
-host    all             all             ::1/128                 trust
+# Lokale Verbindungen mit Passwort (md5)
+local   all             all                                     md5
+host    all             all             127.0.0.1/32            md5
+host    all             all             ::1/128                 md5
 
 # Externe Verbindungen BLOCKIERT (reject)
 host    all             all             0.0.0.0/0               reject
 EOF
     
-    log "SUCCESS" "PostgreSQL configured for localhost trust authentication"
+    log "SUCCESS" "PostgreSQL configured for password authentication"
     
     # Reload PostgreSQL
     systemctl reload postgresql 2>/dev/null || true
     log "SUCCESS" "PostgreSQL configuration reloaded"
     
-    # Update odoo.conf for trust authentication
+    # Create/update odoo database user with password
+    log "INFO" "Creating/updating odoo database user..."
+    sudo -u postgres psql -c "CREATE USER $ODOO_USER WITH CREATEDB SUPERUSER;" 2>/dev/null || log "INFO" "User $ODOO_USER already exists"
+    sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD 'odoo';" 2>&1 | tee -a "$LOG_FILE"
+    
+    # Update odoo.conf for password authentication
     sed -i 's|^db_host.*|db_host = localhost|' "$ODOO_CONFIG"
     sed -i 's|^db_port.*|db_port = 5432|' "$ODOO_CONFIG"
     sed -i 's|^db_user.*|db_user = odoo|' "$ODOO_CONFIG"
-    sed -i 's|^db_password.*|db_password = False|' "$ODOO_CONFIG"
+    sed -i 's|^db_password.*|db_password = odoo|' "$ODOO_CONFIG"
     
-    log "SUCCESS" "Odoo configuration updated for trust authentication"
+    log "SUCCESS" "Odoo configuration updated for password authentication"
     
     # Test connection
-    if psql -h localhost -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
-        log "SUCCESS" "PostgreSQL trust authentication verified"
+    if PGPASSWORD='odoo' psql -h localhost -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
+        log "SUCCESS" "PostgreSQL password authentication verified"
     else
-        log "WARN" "PostgreSQL trust authentication test failed - may need manual configuration"
+        log "WARN" "PostgreSQL password authentication test failed - may need manual configuration"
     fi
 }
 
@@ -799,7 +804,7 @@ main() {
     install_odoo_package
     create_odoo_config
     setup_database
-    setup_postgres_trust
+    setup_postgres_auth
     install_pgvector
     setup_custom_addons
     create_systemd_service

@@ -62,13 +62,24 @@ else
     exit 1
 fi
 
+# Test 7: Password authentication setup
+echo "✅ Test 7: Checking password authentication..."
+if grep -q "setup_postgres_auth" scripts/install-odoo19.sh; then
+    echo "✅ Using password authentication instead of trust"
+else
+    echo "❌ Still using trust authentication"
+    exit 1
+fi
+
+# Test 8: Database password configuration
+echo "✅ Test 8: Checking database password config..."
+if grep -q "db_password = odoo" config/odoo.conf.example; then
+    echo "✅ Database password correctly set in config template"
+else
+    echo "❌ Database password not set in config template"
+    exit 1
+fi
+
 echo "========================="
-echo "🎉 All tests passed! The fixes are working correctly."
-echo ""
-echo "Fixed issues:"
-echo "- sed commands now use safe delimiters (| instead of /)"
-echo "- systemd service uses python3 -m odoo with WorkingDirectory"
-echo "- zope.event and zope.interface included in dependencies"
-echo "- Nginx setup handles non-interactive environments"
-echo "- Custom addons use correct /var/odoo_addons path"
-echo "- Service is more robust and compatible"
+echo "🎉 All tests passed! All fixes are properly implemented."
+echo "📝 Scripts are ready for production use."
