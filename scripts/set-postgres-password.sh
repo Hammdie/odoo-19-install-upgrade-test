@@ -57,7 +57,7 @@ if [[ -f "$ODOO_CONF" ]]; then
     
     # Update database configuration
     if grep -q "^db_password" "$ODOO_CONF"; then
-        sudo sed -i "s/^db_password.*/db_password = $USER_PASSWORD/" "$ODOO_CONF"
+        sudo sed -i "s|^db_password.*|db_password = $USER_PASSWORD|" "$ODOO_CONF"
     else
         echo "db_password = $USER_PASSWORD" | sudo tee -a "$ODOO_CONF"
     fi

@@ -277,6 +277,8 @@ install_odoo_dependencies() {
         "docutils"
         "gevent"
         "greenlet"
+        "zope.event"
+        "zope.interface"
         "idna"
         "Jinja2"
         "MarkupSafe"
@@ -299,7 +301,7 @@ install_odoo_dependencies() {
     done
     
     # Verify critical dependencies are installed
-    local critical_deps=("passlib" "lxml" "psycopg2" "werkzeug" "Pillow" "babel" "gevent")
+    local critical_deps=("passlib" "lxml" "psycopg2" "werkzeug" "Pillow" "babel" "gevent" "zope.event" "zope.interface")
     local missing_critical=()
     
     for dep in "${critical_deps[@]}"; do
@@ -363,8 +365,8 @@ create_odoo_config() {
     # Copy example config or create new one
     if [[ -f "$PROJECT_ROOT/config/odoo.conf.example" ]]; then
         cp "$PROJECT_ROOT/config/odoo.conf.example" "$ODOO_CONFIG"
-        # Replace placeholder password with actual password
-        sed -i "s/change_me_admin_password/$admin_password/" "$ODOO_CONFIG"
+        # Replace placeholder password with actual password (using safe sed with escaped delimiters)
+        sed -i "s|change_me_admin_password|$admin_password|" "$ODOO_CONFIG"
         log "INFO" "Copied configuration from project template"
     else
         # Create basic configuration
@@ -412,7 +414,7 @@ setup_database() {
             if PGPASSWORD="$existing_password" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -c "\l" postgres &>/dev/null; then
                 log "SUCCESS" "Existing database password is valid"
                 # Update new config with existing password
-                sed -i "s/db_password = .*/db_password = $existing_password/" "$ODOO_CONFIG"
+                sed -i "s|db_password = .*|db_password = $existing_password|" "$ODOO_CONFIG"
                 return 0
             else
                 log "WARN" "Existing database password doesn't work"
@@ -442,7 +444,7 @@ setup_database() {
         if sudo -u "$ODOO_USER" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -c "\l" postgres &>/dev/null; then
             log "SUCCESS" "Database authentication working without password"
             # Set empty password in config for peer authentication
-            sed -i "s/db_password = .*/db_password = False/" "$ODOO_CONFIG"
+            sed -i "s|db_password = .*|db_password = False|" "$ODOO_CONFIG"
             return 0
         fi
     else
@@ -456,7 +458,7 @@ setup_database() {
     sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD '$db_password';" 2>&1 | tee -a "$LOG_FILE"
     
     # Update config file with database password
-    sed -i "s/db_password = .*/db_password = $db_password/" "$ODOO_CONFIG"
+    sed -i "s|db_password = .*|db_password = $db_password|" "$ODOO_CONFIG"
     
     log "SUCCESS" "Database setup completed"
 }
@@ -511,10 +513,10 @@ EOF
     log "SUCCESS" "PostgreSQL configuration reloaded"
     
     # Update odoo.conf for trust authentication
-    sed -i 's/^db_host.*/db_host = localhost/' "$ODOO_CONFIG"
-    sed -i 's/^db_port.*/db_port = 5432/' "$ODOO_CONFIG"
-    sed -i 's/^db_user.*/db_user = odoo/' "$ODOO_CONFIG"
-    sed -i 's/^db_password.*/db_password = False/' "$ODOO_CONFIG"
+    sed -i 's|^db_host.*|db_host = localhost|' "$ODOO_CONFIG"
+    sed -i 's|^db_port.*|db_port = 5432|' "$ODOO_CONFIG"
+    sed -i 's|^db_user.*|db_user = odoo|' "$ODOO_CONFIG"
+    sed -i 's|^db_password.*|db_password = False|' "$ODOO_CONFIG"
     
     log "SUCCESS" "Odoo configuration updated for trust authentication"
     
@@ -619,7 +621,8 @@ After=network.target postgresql.service
 Type=simple
 User=$ODOO_USER
 Group=$ODOO_USER
-ExecStart=$ODOO_HOME/odoo/odoo-bin -c $ODOO_CONFIG
+WorkingDirectory=$ODOO_HOME/odoo
+ExecStart=/usr/bin/python3 -m odoo --config=$ODOO_CONFIG
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=on-failure
 RestartSec=5

@@ -465,7 +465,7 @@ main() {
     echo
     
     # Interaktiver Modus wenn keine Parameter angegeben
-    if [[ $# -lt 1 ]]; then
+    if [[ $# -lt 1 ]] && [[ -t 0 ]] && [[ "${DEBIAN_FRONTEND:-}" != "noninteractive" ]]; then
         log_info "Interaktiver Modus - Bitte geben Sie die Informationen ein"
         echo
         
@@ -510,7 +510,12 @@ main() {
             exit 0
         fi
     else
-        # Parameter-Modus
+        # Parameter-Modus oder nicht-interaktive Umgebung
+        if [[ $# -lt 1 ]]; then
+            log_error "Domain als Parameter erforderlich in nicht-interaktiver Umgebung"
+            log_error "Usage: $0 <domain> [email] [--no-backup]"
+            exit 1
+        fi
         DOMAIN="$1"
         EMAIL="${2:-admin@${DOMAIN}}"
     fi
