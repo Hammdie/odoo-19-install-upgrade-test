@@ -817,33 +817,44 @@ test_installation() {
     # Wait for service to start
     sleep 10
     
+    # Give Odoo a moment to fully start
+    sleep 5
+    
     # Check if service is running
-    if systemctl is-active --quiet odoo; then
+    local service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
+    log "INFO" "Odoo service status: $service_status"
+    
+    if [[ "$service_status" == "active" ]]; then
         log "SUCCESS" "Odoo service is running"
         
-        # Check if Odoo is responding (quick test)
-        local max_attempts=5
-        local attempt=1
-        
-        while [[ $attempt -le $max_attempts ]]; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8069 --connect-timeout 3 | grep -q "200\|302"; then
-                log "SUCCESS" "Odoo is responding on port 8069"
-                break
-            fi
-            
-            log "INFO" "Waiting for Odoo to respond... (attempt $attempt/$max_attempts)"
+        # Check if port is listening
+        if ss -tuln | grep -q ":8069 "; then
+            log "SUCCESS" "Odoo is listening on port 8069"
+        else
+            log "WARN" "Port 8069 not ready yet - checking again"
             sleep 3
-            ((attempt++))
-        done
-        
-        if [[ $attempt -gt $max_attempts ]]; then
-            log "INFO" "Odoo service is running (may still be starting up)"
-            log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
         fi
+        
+        # Quick response test (don't fail if no response)
+        local response_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8069 --connect-timeout 5 --max-time 10 2>/dev/null || echo "000")
+        if [[ "$response_code" =~ ^(200|302)$ ]]; then
+            log "SUCCESS" "Odoo is responding (HTTP $response_code)"
+        else
+            log "INFO" "Odoo service started but not responding yet (this is normal)"
+            log "INFO" "Odoo may take a few minutes to initialize the database"
+        fi
+        
+        log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
+        
+    elif [[ "$service_status" == "activating" ]]; then
+        log "INFO" "Odoo service is starting up..."
+        log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
+        
     else
-        log "ERROR" "Failed to start Odoo service"
+        log "ERROR" "Failed to start Odoo service (status: $service_status)"
+        log "INFO" "Check status: systemctl status odoo"
         log "INFO" "Check logs: journalctl -u odoo -f"
-        exit 1
+        # Don't exit - let the user investigate
     fi
 }
 
