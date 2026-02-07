@@ -355,30 +355,12 @@ install_odoo_dependencies() {
         
         if [[ ${#still_missing[@]} -gt 0 ]]; then
             log "ERROR" "Still missing after force install: ${still_missing[*]}"
-            fi
-        done
-        
-        # Re-verify after force install
-        log "INFO" "Re-verifying dependencies after force install..."
-        local still_missing=()
-        for dep in "${missing_critical[@]}"; do
-            local import_name="${dep,,}"
-            case "$dep" in
-                "Pillow") import_name="PIL" ;;
-                "psycopg2") import_name="psycopg2" ;;
-                "zope.event") import_name="zope.event" ;;
-                "zope.interface") import_name="zope.interface" ;;
-            esac
-            
-            if ! python3 -c "import $import_name" 2>/dev/null; then
-                still_missing+=("$dep")
-            fi
-        done
-        
-        if [[ ${#still_missing[@]} -gt 0 ]]; then
-            log "ERROR" "Still missing after force install: ${still_missing[*]}"
-        log "ERROR" "Odoo will not start without these packages!"
-        exit 1
+            return 1
+        else
+            log "SUCCESS" "All critical dependencies now available"
+        fi
+    else
+        log "SUCCESS" "All critical dependencies verified"
     fi
     
     log "SUCCESS" "Odoo Python dependencies installed"
