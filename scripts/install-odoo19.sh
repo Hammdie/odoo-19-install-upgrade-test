@@ -305,19 +305,51 @@ install_odoo_dependencies() {
     local missing_critical=()
     
     for dep in "${critical_deps[@]}"; do
-        if ! python3 -c "import ${dep,,}" 2>/dev/null; then
-            # Try alternate import names
-            local import_name="${dep,,}"
-            [[ "$dep" == "Pillow" ]] && import_name="PIL"
-            [[ "$dep" == "psycopg2" ]] && import_name="psycopg2"
-            if ! python3 -c "import $import_name" 2>/dev/null; then
-                missing_critical+=("$dep")
+        # Use correct import names for verification
+        local import_name="${dep,,}"
+        case "$dep" in
+            "Pillow") import_name="PIL" ;;
+            "psycopg2") import_name="psycopg2" ;;
+            "zope.event") import_name="zope.event" ;;
+            "zope.interface") import_name="zope.interface" ;;
+        esac
+        
+        if ! python3 -c "import $import_name" 2>/dev/null; then
+            log "WARN" "Missing dependency: $dep (import: $import_name)"
+            missing_critical+=("$dep")
+        else
+            log "INFO" "✓ Verified dependency: $dep"
+        log "ERROR" "Attempting to force install missing dependencies..."
+        
+        # Try to install missing dependencies one by one
+        for missing_dep in "${missing_critical[@]}"; do
+            log "INFO" "Force installing: $missing_dep"
+            if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall "$missing_dep"; then
+                log "ERROR" "Failed to install critical dependency: $missing_dep"
+            else
+                log "SUCCESS" "Successfully installed: $missing_dep"
             fi
-        fi
-    done
-    
-    if [[ ${#missing_critical[@]} -gt 0 ]]; then
-        log "ERROR" "Critical dependencies missing: ${missing_critical[*]}"
+        done
+        
+        # Re-verify after force install
+        log "INFO" "Re-verifying dependencies after force install..."
+        local still_missing=()
+        for dep in "${missing_critical[@]}"; do
+            local import_name="${dep,,}"
+            case "$dep" in
+                "Pillow") import_name="PIL" ;;
+                "psycopg2") import_name="psycopg2" ;;
+                "zope.event") import_name="zope.event" ;;
+                "zope.interface") import_name="zope.interface" ;;
+            esac
+            
+            if ! python3 -c "import $import_name" 2>/dev/null; then
+                still_missing+=("$dep")
+            fi
+        done
+        
+        if [[ ${#still_missing[@]} -gt 0 ]]; then
+            log "ERROR" "Still missing after force install: ${still_missing[*]}"
         log "ERROR" "Odoo will not start without these packages!"
         exit 1
     fi
