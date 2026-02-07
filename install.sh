@@ -1312,9 +1312,15 @@ handle_existing_installation() {
             esac
         done
     else
-        # Auto mode - intelligent upgrade
-        log "INFO" "Auto mode: Upgrading existing installation to Odoo 19.0"
-        upgrade_existing_installation
+        # Auto mode - check force reinstall flag
+        if [[ "$FORCE_REINSTALL" == true ]]; then
+            log "INFO" "Auto mode with force reinstall: Removing existing installation"
+            backup_existing_installation
+            remove_existing_installation
+        else
+            log "INFO" "Auto mode: Upgrading existing installation to Odoo 19.0"
+            upgrade_existing_installation
+        fi
     fi
 }
 
@@ -1325,19 +1331,20 @@ remove_existing_installation() {
     # Stop services
     if systemctl is-active --quiet odoo 2>/dev/null; then
         log "INFO" "Stopping Odoo service..."
-        systemctl stop odoo
+        systemctl stop odoo 2>/dev/null || true
         
-        # Wait for graceful shutdown
-        local timeout=30
-        while systemctl is-active --quiet odoo && [[ $timeout -gt 0 ]]; do
+        # Force kill any remaining processes
+        pkill -f "odoo" 2>/dev/null || true
+        sleep 3
+        
+        # Verify stopped
+        if ! systemctl is-active --quiet odoo 2>/dev/null; then
+            log "SUCCESS" "Odoo service stopped"
+        else
+            log "WARN" "Forcing Odoo service stop..."
+            systemctl kill odoo 2>/dev/null || true
+            pkill -9 -f "odoo" 2>/dev/null || true
             sleep 2
-            ((timeout-=2))
-        done
-        
-        if systemctl is-active --quiet odoo; then
-            log "WARN" "Force stopping Odoo service..."
-            systemctl kill odoo
-            sleep 5
         fi
     fi
     
@@ -1392,7 +1399,20 @@ upgrade_existing_installation() {
     # Stop service for upgrade
     if systemctl is-active --quiet odoo 2>/dev/null; then
         log "INFO" "Stopping Odoo service for upgrade..."
-        systemctl stop odoo
+        systemctl stop odoo 2>/dev/null || true
+        
+        # Force kill any remaining processes
+        pkill -f "odoo" 2>/dev/null || true
+        sleep 2
+        
+        # Verify stopped
+        if ! systemctl is-active --quiet odoo 2>/dev/null; then
+            log "SUCCESS" "Odoo service stopped for upgrade"
+        else
+            log "WARN" "Forcing Odoo service stop for upgrade..."
+            systemctl kill odoo 2>/dev/null || true
+            pkill -9 -f "odoo" 2>/dev/null || true
+        fi
     fi
     
     # Backup configuration before merge
