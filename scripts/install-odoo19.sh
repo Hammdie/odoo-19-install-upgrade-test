@@ -495,8 +495,13 @@ setup_database() {
     
     # Only set new password if nothing else works
     log "WARN" "Setting new database password as fallback"
-    local db_password=$(openssl rand -base64 32)
-    sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD '$db_password';" 2>&1 | tee -a "$LOG_FILE"
+    local db_password="odoo"
+    
+    # Set postgres superuser password to known value
+    echo "postgres:admin123" | chpasswd 2>/dev/null || true
+    
+    # Set database passwords using peer authentication (as postgres system user)
+    sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD '$db_password';" 2>/dev/null || true
     
     # Update config file with database password
     sed -i "s|db_password = .*|db_password = $db_password|" "$ODOO_CONFIG"
@@ -556,16 +561,39 @@ EOF
     # Create/update odoo database user with password (automatic setup)
     log "INFO" "Creating/updating odoo database user..."
     
-    # Set postgres superuser password first (if not already set)
+    # Ensure postgres system user can authenticate without password prompts
+    systemctl stop postgresql 2>/dev/null || true
+    sleep 2
+    
+    # Start PostgreSQL with trust authentication temporarily
+    local pg_version=$(ls /etc/postgresql/ 2>/dev/null | head -n1)
+    if [[ -n "$pg_version" ]] && [[ -f "/etc/postgresql/$pg_version/main/pg_hba.conf" ]]; then
+        # Backup and set trust authentication temporarily
+        cp "/etc/postgresql/$pg_version/main/pg_hba.conf" "/etc/postgresql/$pg_version/main/pg_hba.conf.backup"
+        echo "local all all trust" > "/etc/postgresql/$pg_version/main/pg_hba.conf"
+        echo "host all all 127.0.0.1/32 trust" >> "/etc/postgresql/$pg_version/main/pg_hba.conf"
+        echo "host all all ::1/128 trust" >> "/etc/postgresql/$pg_version/main/pg_hba.conf"
+    fi
+    
+    systemctl start postgresql 2>/dev/null || true
+    sleep 3
+    
+    # Set postgres superuser password first
     local postgres_password="admin123"
     echo "postgres:$postgres_password" | chpasswd 2>/dev/null || true
     
-    # Set postgres database password
+    # Set postgres database password using trust auth
     sudo -u postgres psql -c "ALTER USER postgres PASSWORD '$postgres_password';" 2>/dev/null || true
     
-    # Create/update odoo user with automatic password
+    # Create/update odoo user with automatic password  
     sudo -u postgres psql -c "CREATE USER $ODOO_USER WITH CREATEDB SUPERUSER;" 2>/dev/null || log "INFO" "User $ODOO_USER already exists"
     sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD 'odoo';" 2>/dev/null || true
+    
+    # Restore secure authentication
+    if [[ -n "$pg_version" ]] && [[ -f "/etc/postgresql/$pg_version/main/pg_hba.conf.backup" ]]; then
+        mv "/etc/postgresql/$pg_version/main/pg_hba.conf.backup" "/etc/postgresql/$pg_version/main/pg_hba.conf"
+        systemctl reload postgresql 2>/dev/null || true
+    fi
     
     # Update odoo.conf for password authentication
     sed -i 's|^db_host.*|db_host = localhost|' "$ODOO_CONFIG"
@@ -576,11 +604,13 @@ EOF
     log "SUCCESS" "Odoo configuration updated for password authentication"
     
     # Test connection
-    if PGPASSWORD='odoo' psql -h localhost -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
+    export PGPASSWORD='odoo'
+    if psql -h localhost -U odoo -d postgres -c "SELECT version();" >/dev/null 2>&1; then
         log "SUCCESS" "PostgreSQL password authentication verified"
     else
         log "WARN" "PostgreSQL password authentication test failed - may need manual configuration"
     fi
+    unset PGPASSWORD
 }
 
 # Install pgvector extension for RAG (Retrieval-Augmented Generation)
