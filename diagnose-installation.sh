@@ -146,8 +146,8 @@ if systemctl is-active --quiet postgresql; then
         echo -e "  ${YELLOW}Solution: sudo -u postgres createuser -s odoo${NC}"
     fi
     
-    # Test connection
-    if sudo -u odoo psql -h localhost -U odoo -d postgres -c "SELECT version();" &>/dev/null; then
+    # Test connection with default password
+    if PGPASSWORD="odoo" psql -h localhost -U odoo -d postgres -c "SELECT version();" &>/dev/null; then
         echo -e "${GREEN}✓ PostgreSQL connection test successful${NC}"
     else
         echo -e "${RED}✗ PostgreSQL connection test failed${NC}"
