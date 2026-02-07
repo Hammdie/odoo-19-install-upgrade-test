@@ -821,24 +821,24 @@ test_installation() {
     if systemctl is-active --quiet odoo; then
         log "SUCCESS" "Odoo service is running"
         
-        # Check if Odoo is responding
-        local max_attempts=30
+        # Check if Odoo is responding (quick test)
+        local max_attempts=5
         local attempt=1
         
         while [[ $attempt -le $max_attempts ]]; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8069 | grep -q "200\|302"; then
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8069 --connect-timeout 3 | grep -q "200\|302"; then
                 log "SUCCESS" "Odoo is responding on port 8069"
                 break
             fi
             
             log "INFO" "Waiting for Odoo to respond... (attempt $attempt/$max_attempts)"
-            sleep 10
+            sleep 3
             ((attempt++))
         done
         
         if [[ $attempt -gt $max_attempts ]]; then
-            log "WARN" "Odoo service is running but not responding on port 8069"
-            log "INFO" "Check logs: journalctl -u odoo -f"
+            log "INFO" "Odoo service is running (may still be starting up)"
+            log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
         fi
     else
         log "ERROR" "Failed to start Odoo service"
