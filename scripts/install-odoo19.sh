@@ -553,10 +553,19 @@ EOF
     systemctl reload postgresql 2>/dev/null || true
     log "SUCCESS" "PostgreSQL configuration reloaded"
     
-    # Create/update odoo database user with password
+    # Create/update odoo database user with password (automatic setup)
     log "INFO" "Creating/updating odoo database user..."
+    
+    # Set postgres superuser password first (if not already set)
+    local postgres_password="admin123"
+    echo "postgres:$postgres_password" | chpasswd 2>/dev/null || true
+    
+    # Set postgres database password
+    sudo -u postgres psql -c "ALTER USER postgres PASSWORD '$postgres_password';" 2>/dev/null || true
+    
+    # Create/update odoo user with automatic password
     sudo -u postgres psql -c "CREATE USER $ODOO_USER WITH CREATEDB SUPERUSER;" 2>/dev/null || log "INFO" "User $ODOO_USER already exists"
-    sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD 'odoo';" 2>&1 | tee -a "$LOG_FILE"
+    sudo -u postgres psql -c "ALTER USER $ODOO_USER PASSWORD 'odoo';" 2>/dev/null || true
     
     # Update odoo.conf for password authentication
     sed -i 's|^db_host.*|db_host = localhost|' "$ODOO_CONFIG"
@@ -617,21 +626,30 @@ install_pgvector() {
         if make 2>&1 | tee -a "$LOG_FILE" && make install 2>&1 | tee -a "$LOG_FILE"; then
             log "SUCCESS" "pgvector compiled and installed successfully"
             
-            # Enable extension in PostgreSQL
+            # Enable extension in PostgreSQL (without password prompts)
             log "INFO" "Enabling pgvector extension in PostgreSQL..."
-            sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>&1 | tee -a "$LOG_FILE" || {
-                log "WARN" "Could not enable vector extension in default database"
-                log "INFO" "Extension will be available for manual activation per database"
-            }
             
-            # Verify installation
+            # Use automatic postgres authentication
+            export PGPASSWORD="admin123"
+            
+            # Try to enable vector extension
+            if sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null; then
+                log "SUCCESS" "pgvector extension enabled in default database"
+            else
+                log "INFO" "pgvector installed - enable per database with: CREATE EXTENSION vector;"
+            fi
+            
+            # Verify installation (without password prompts)
             if sudo -u postgres psql -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | grep -q "[0-9]"; then
-                local vector_version=$(sudo -u postgres psql -t -c "SELECT extversion FROM pg_extension WHERE extname='vector';" | xargs)
+                local vector_version=$(sudo -u postgres psql -t -c "SELECT extversion FROM pg_extension WHERE extname='vector';" 2>/dev/null | xargs)
                 log "SUCCESS" "pgvector extension installed and enabled (version $vector_version)"
                 log "INFO" "RAG capabilities are now available for Odoo AI agents"
             else
                 log "INFO" "pgvector installed - enable per database with: CREATE EXTENSION vector;"
             fi
+            
+            # Clean up environment variable
+            unset PGPASSWORD
             
             # Cleanup
             cd /
