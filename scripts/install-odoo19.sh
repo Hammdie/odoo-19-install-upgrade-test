@@ -768,6 +768,24 @@ show_summary() {
     log "INFO" "Log File: /var/log/odoo/odoo.log"
     log "INFO" "Service Status: $(systemctl is-active odoo)"
     log "INFO" "Web Interface: http://localhost:8069"
+    
+    # Check wkhtmltopdf status
+    if command -v wkhtmltopdf &> /dev/null; then
+        local wkhtml_version=$(wkhtmltopdf --version 2>&1 | head -1)
+        if wkhtmltopdf --version 2>&1 | grep -q "with patched qt"; then
+            log "INFO" "wkhtmltopdf: Qt patched version installed ✓"
+        else
+            log "WARN" "wkhtmltopdf: NO Qt patch detected ⚠️"
+            log "WARN" "PDF reports may have issues!"
+            log "WARN" "Install Qt patched version: sudo $PROJECT_ROOT/fix-wkhtmltopdf.sh"
+        fi
+        log "INFO" "wkhtmltopdf Version: $wkhtml_version"
+    else
+        log "ERROR" "wkhtmltopdf: NOT INSTALLED ❌"
+        log "ERROR" "PDF reports will FAIL!"
+        log "ERROR" "Install with: sudo $PROJECT_ROOT/fix-wkhtmltopdf.sh"
+    fi
+    
     log "INFO" ""
     log "INFO" "PostgreSQL Configuration:"
     log "INFO" "- Localhost: trust (no password required)"

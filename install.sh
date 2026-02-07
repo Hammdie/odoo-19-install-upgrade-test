@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 LOG_DIR="/var/log/odoo-upgrade"
 LOG_FILE="$LOG_DIR/install-$(date +%Y%m%d-%H%M%S).log"
+ERROR_LOG="$LOG_DIR/error-$(date +%Y%m%d-%H%M%S).log"
 
 # Colors for output
 RED='\033[0;31m'
@@ -47,6 +48,15 @@ log() {
     local message="$@"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
+    
+    # Log errors to separate error log with full context
+    if [[ "$level" == "ERROR" ]]; then
+        echo "[$timestamp] $message" >> "$ERROR_LOG"
+        # Also log the command that failed if available
+        if [[ -n "$BASH_COMMAND" ]]; then
+            echo "[$timestamp] Failed command: $BASH_COMMAND" >> "$ERROR_LOG"
+        fi
+    fi
     
     case $level in
         "ERROR")
@@ -719,14 +729,24 @@ show_interactive_menu() {
                 fi
                 
                 echo
-                read -p "Install Odoo Enterprise edition? (y/N): " -n 1 -r
-                echo
-                
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    INSTALL_ENTERPRISE=true
-                    echo -e "${GREEN}✓${NC} Enterprise edition will be installed"
+                if [[ "$AUTO_MODE" != true ]]; then
+                    read -p "Install Odoo Enterprise edition? (y/N): " -n 1 -r
+                    echo
+                    
+                    if [[ $REPLY =~ ^[Yy]$ ]]; then
+                        INSTALL_ENTERPRISE=true
+                        echo -e "${GREEN}✓${NC} Enterprise edition will be installed"
+                    else
+                        INSTALL_ENTERPRISE=false
+                        echo -e "${BLUE}ℹ${NC} Enterprise edition will be skipped"
+                    fi
                 else
-                    INSTALL_ENTERPRISE=false
+                    # In AUTO_MODE, skip enterprise unless explicitly requested
+                    if [[ "$INSTALL_ENTERPRISE" == true ]]; then
+                        echo -e "${GREEN}✓${NC} Enterprise edition will be installed (auto-mode)"
+                    else
+                        echo -e "${BLUE}ℹ${NC} Enterprise edition will be skipped (auto-mode)"
+                    fi
                 fi
                 
                 echo
@@ -1241,6 +1261,8 @@ handle_existing_installation() {
                 log "INFO" "Force reinstall cancelled by user"
                 exit 0
             fi
+        else
+            log "INFO" "Auto-mode: Proceeding with force reinstall"
         fi
         remove_existing_installation
         return 0
@@ -1411,6 +1433,8 @@ install_automation_only() {
                 log "INFO" "Installation cancelled by user"
                 exit 0
             fi
+        else
+            log "INFO" "Auto-mode: Continuing despite inactive service"
         fi
     fi
     
@@ -1520,15 +1544,57 @@ run_odoo_installation() {
     local install_script="$PROJECT_ROOT/scripts/install-odoo19.sh"
     
     if [[ -f "$install_script" ]]; then
+        # Make script executable
+        chmod +x "$install_script"
+        
+        log "INFO" "Running Odoo installation script: $install_script"
+        
         if "$install_script" 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "Odoo 19.0 installation completed successfully"
-            return 0
+            log "SUCCESS" "Odoo installation script completed"
+            
+            # Verify installation was successful
+            sleep 5
+            
+            # Check if service was created
+            if systemctl list-unit-files 2>/dev/null | grep -q "^odoo.service"; then
+                log "SUCCESS" "Odoo service was created successfully"
+                
+                # Try to start the service
+                if systemctl is-active --quiet odoo; then
+                    log "SUCCESS" "Odoo service is running"
+                else
+                    log "WARN" "Odoo service exists but is not running - attempting to start..."
+                    if systemctl start odoo; then
+                        sleep 5
+                        if systemctl is-active --quiet odoo; then
+                            log "SUCCESS" "Odoo service started successfully"
+                        else
+                            log "ERROR" "Odoo service failed to start properly"
+                            log "ERROR" "Check service logs: sudo journalctl -u odoo -n 20"
+                            return 1
+                        fi
+                    else
+                        log "ERROR" "Failed to start Odoo service"
+                        return 1
+                    fi
+                fi
+                
+                return 0
+            else
+                log "ERROR" "Odoo service was not created - installation incomplete"
+                log "ERROR" "This indicates the installation script failed or was interrupted"
+                return 1
+            fi
         else
-            log "ERROR" "Odoo installation failed"
+            local exit_code=$?
+            log "ERROR" "Odoo installation script failed with exit code: $exit_code"
+            log "ERROR" "Check the installation log for details: $LOG_FILE"
+            log "ERROR" "You can also run the installation script manually: sudo $install_script"
             return 1
         fi
     else
         log "ERROR" "Odoo installation script not found: $install_script"
+        log "ERROR" "Please ensure the script exists and is executable"
         return 1
     fi
 }
@@ -1889,6 +1955,19 @@ verify_installation() {
         log "WARN" "Cron jobs may not be installed correctly"
     fi
     
+    # Check wkhtmltopdf (critical for PDF generation)
+    if command -v wkhtmltopdf &> /dev/null; then
+        if wkhtmltopdf --version 2>&1 | grep -q "with patched qt"; then
+            log "SUCCESS" "wkhtmltopdf with Qt patch is available"
+        else
+            log "WARN" "wkhtmltopdf found but WITHOUT Qt patch - PDF reports may have issues"
+            verification_passed=false
+        fi
+    else
+        log "ERROR" "wkhtmltopdf is missing - PDF reports will fail"
+        verification_passed=false
+    fi
+    
     if [[ "$verification_passed" == true ]]; then
         log "SUCCESS" "Installation verification completed successfully"
         return 0
@@ -2147,8 +2226,11 @@ main() {
     log "INFO" "Starting Odoo 19.0 Upgrade System Installation"
     log "INFO" "Installation directory: $PROJECT_ROOT"
     log "INFO" "Log file: $LOG_FILE"
+    log "INFO" "Error log: $ERROR_LOG"
     log "INFO" "Documentation: https://github.com/Hammdie/odoo-upgrade-cron"
     log "INFO" "Arguments: $*"
+    log "INFO" "System: $(uname -a)"
+    log "INFO" "Date: $(date)"
     
     # Pre-installation checks
     check_root
@@ -2184,6 +2266,24 @@ main() {
     
     if ! run_odoo_installation; then
         log "ERROR" "Odoo installation failed"
+        log "ERROR" "========================================="
+        log "ERROR" "Troubleshooting Information"
+        log "ERROR" "========================================="
+        log "ERROR" "• Check installation log: $LOG_FILE"
+        log "ERROR" "• Run diagnosis tool: sudo $PROJECT_ROOT/diagnose-installation.sh"
+        log "ERROR" "• Try quick fix: sudo $PROJECT_ROOT/fix-installation.sh"
+        log "ERROR" "• Manual check: sudo systemctl status odoo"
+        log "ERROR" "• View logs: sudo journalctl -u odoo -n 20"
+        log "ERROR" "• Force reinstall: sudo $PROJECT_ROOT/install.sh --auto --force"
+        log "ERROR" "========================================="
+        
+        echo
+        echo -e "${RED}${BOLD}Odoo installation failed!${NC}"
+        echo -e "${YELLOW}Quick troubleshooting options:${NC}"
+        echo -e "  ${GREEN}1. Run diagnosis: sudo ./diagnose-installation.sh${NC}"
+        echo -e "  ${GREEN}2. Try quick fix: sudo ./fix-installation.sh${NC}"
+        echo -e "  ${GREEN}3. Force reinstall: sudo ./install.sh --auto --force${NC}"
+        echo
         exit 1
     fi
     
@@ -2212,24 +2312,57 @@ main() {
     fi
     
     # Verify installation BEFORE Nginx setup (Odoo must be running first!)
+    local installation_successful=false
+    
     if ! verify_installation; then
         log "ERROR" "Installation verification failed - aborting Nginx setup"
-        log "INFO" "Please check Odoo service status and logs:"
-        log "INFO" "  sudo systemctl status odoo"
-        log "INFO" "  sudo journalctl -u odoo -n 50"
-        log "INFO" "You can run Nginx setup later manually:"
-        log "INFO" "  sudo $PROJECT_ROOT/scripts/setup-odoo-nginx.sh"
+        log "ERROR" "========================================="
+        log "ERROR" "INSTALLATION FAILED!"
+        log "ERROR" "========================================="
+        log "ERROR" "Error log: $ERROR_LOG"
+        log "ERROR" "Installation log: $LOG_FILE"
+        log "ERROR" "Please check Odoo service status and logs:"
+        log "ERROR" "  sudo systemctl status odoo"
+        log "ERROR" "  sudo journalctl -u odoo -n 50"
+        log "ERROR" "Run diagnosis: sudo $PROJECT_ROOT/diagnose-installation.sh"
+        log "ERROR" "Try quick fix: sudo $PROJECT_ROOT/fix-installation.sh"
+        log "ERROR" "========================================="
+        
+        echo
+        echo -e "${RED}${BOLD}❌ INSTALLATION FAILED!${NC}"
+        echo -e "${RED}Odoo service is not running properly.${NC}"
+        echo
+        echo -e "${YELLOW}${BOLD}📋 ERROR LOG CREATED FOR SUPPORT:${NC}"
+        echo -e "${BLUE}  📁 File: $ERROR_LOG${NC}"
+        echo -e "${BLUE}  📋 Send this file for support and troubleshooting${NC}"
+        echo
+        echo -e "${YELLOW}Troubleshooting steps:${NC}"
+        echo -e "  ${GREEN}1. Check error log: cat $ERROR_LOG${NC}"
+        echo -e "  ${GREEN}2. Run diagnosis: sudo ./diagnose-installation.sh${NC}"
+        echo -e "  ${GREEN}3. Try quick fix: sudo ./fix-installation.sh${NC}"
+        echo -e "  ${GREEN}4. Force reinstall: sudo ./install.sh --auto --force${NC}"
+        echo
+        
+        installation_successful=false
     else
         # Run Nginx setup only if verification passed
         if ! run_nginx_setup; then
             log "WARN" "Nginx setup failed - Odoo is still accessible via HTTP on port 8069"
         fi
+        installation_successful=true
     fi
     
-    # Show final summary
-    show_final_summary
-    
-    log "SUCCESS" "Odoo 19.0 Upgrade System installation completed successfully!"
+    # Show final summary only if installation was successful
+    if [[ "$installation_successful" == true ]]; then
+        show_final_summary
+        log "SUCCESS" "Odoo 19.0 Upgrade System installation completed successfully!"
+        
+        echo
+        echo -e "${GREEN}${BOLD}🎉 Installation completed successfully!${NC}"
+    else
+        log "ERROR" "Installation completed with errors - see troubleshooting information above"
+        exit 1
+    fi
 }
 
 # Run main function
