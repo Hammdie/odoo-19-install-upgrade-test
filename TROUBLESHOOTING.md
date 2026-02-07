@@ -79,9 +79,48 @@ python3 -c "import odoo; print('OK')"
 
 # wkhtmltopdf Qt-Patch prüfen (KRITISCH für PDF-Reports!)
 wkhtmltopdf --version
+
+# Error-Log anzeigen (wenn vorhanden)
+ls -la /var/log/odoo-upgrade/error-*.log 2>/dev/null || echo "Keine Error-Logs gefunden"
+tail -20 /var/log/odoo-upgrade/error-*.log 2>/dev/null || echo "Keine Error-Logs zu lesen"
 ```
 
-#### Schritt 4: Komplette Neuinstallation (wenn nötig)
+#### Schritt 4: SCHNELLDIAGNOSE OHNE SKRIPTE
+Falls die Diagnose-Skripte fehlen, führen Sie diese Befehle direkt aus:
+
+```bash
+# 1. Service Status prüfen
+echo "=== ODOO SERVICE STATUS ==="
+systemctl list-unit-files | grep odoo || echo "Odoo service nicht gefunden"
+systemctl status odoo || echo "Service Status nicht verfügbar"
+
+# 2. Odoo User prüfen
+echo "=== ODOO USER ==="
+id odoo || echo "Odoo user nicht gefunden"
+
+# 3. Odoo Installation prüfen
+echo "=== ODOO INSTALLATION ==="
+ls -la /opt/odoo/ || echo "Odoo Verzeichnis nicht gefunden"
+ls -la /etc/odoo/ || echo "Odoo Config nicht gefunden"
+
+# 4. PostgreSQL prüfen
+echo "=== POSTGRESQL ==="
+systemctl status postgresql || echo "PostgreSQL Service Problem"
+
+# 5. Python Odoo Paket prüfen
+echo "=== PYTHON ODOO ==="
+python3 -c "import odoo; print('Odoo Python Paket: OK')" || echo "Odoo Python Paket FEHLT"
+
+# 6. wkhtmltopdf prüfen (KRITISCH!)
+echo "=== WKHTMLTOPDF ==="
+wkhtmltopdf --version || echo "wkhtmltopdf FEHLT"
+
+# 7. Logs anzeigen
+echo "=== ERROR LOGS ==="
+ls -la /var/log/odoo-upgrade/ 2>/dev/null || echo "Log Verzeichnis nicht gefunden"
+```
+
+#### Schritt 5: Komplette Neuinstallation (wenn nötig)
 ```bash
 sudo ./install.sh --auto --force --nginx-domain office.hecker24.net --nginx-email admin@detalex.de
 ```
