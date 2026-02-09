@@ -42,16 +42,16 @@ log() {
     
     case $level in
         "ERROR")
-            echo -e "${RED}[ERROR]${NC} $message" >&2
+            printf "\033[0;31m[ERROR]\033[0m %s\n" "$message" >&2
             ;;
         "WARN")
-            echo -e "${YELLOW}[WARN]${NC} $message"
+            printf "\033[1;33m[WARN]\033[0m %s\n" "$message"
             ;;
         "INFO")
-            echo -e "${BLUE}[INFO]${NC} $message"
+            printf "\033[0;34m[INFO]\033[0m %s\n" "$message"
             ;;
         "SUCCESS")
-            echo -e "${GREEN}[SUCCESS]${NC} $message"
+            printf "\033[0;32m[SUCCESS]\033[0m %s\n" "$message"
             ;;
     esac
 }
@@ -67,8 +67,8 @@ create_log_dir() {
 # Check if running as root
 check_root() {
     if [ "$(id -u)" != "0" ]; then
-        echo -e "${RED}This script must be run as root or with sudo${NC}"
-        echo -e "Please run: ${YELLOW}sudo $0${NC}"
+        printf "\033[0;31mThis script must be run as root or with sudo\033[0m\n"
+        printf "Please run: \033[1;33msudo $0\033[0m\n"
         exit 1
     fi
 }
@@ -76,7 +76,7 @@ check_root() {
 # Display banner
 show_banner() {
     clear
-    echo -e "${CYAN}${BOLD}"
+    printf "\033[0;36m\033[1m"
     cat << 'EOF'
    ____      _             
   / __ \  __| | ___   ___  
@@ -86,9 +86,9 @@ show_banner() {
                           
    Enterprise 19.0        
 EOF
-    echo -e "${NC}"
-    echo -e "${GREEN}Odoo Enterprise 19.0 Installation${NC}"
-    echo -e "${BLUE}Installation nach /opt/odoo/enterprise${NC}"
+    printf "\033[0m"
+    printf "\033[0;32mOdoo Enterprise 19.0 Installation\033[0m\n"
+    printf "\033[0;34mInstallation nach /opt/odoo/enterprise\033[0m\n"
     echo
 }
 
@@ -237,24 +237,33 @@ create_directory_structure() {
 clone_enterprise_repository() {
     log "INFO" "Cloning Odoo Enterprise 19.0 repository..."
     
-    # Clone the repository
+    # Clone the repository and capture the exit status
     if git clone --branch "$ENTERPRISE_BRANCH" --depth 1 "$ENTERPRISE_REPO" "$ENTERPRISE_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Odoo Enterprise repository cloned successfully"
+        # Additional check: verify clone actually succeeded
+        if [ -d "$ENTERPRISE_DIR/.git" ]; then
+            log "SUCCESS" "✓ Odoo Enterprise repository cloned successfully"
+        else
+            log "ERROR" "✗ Git clone command succeeded but repository directory not created"
+            return 1
+        fi
     else
         log "ERROR" "✗ Failed to clone Odoo Enterprise repository"
         log "INFO" "Possible causes:"
         log "INFO" "  - Invalid GitHub credentials"
         log "INFO" "  - No access to Odoo Enterprise repository"
         log "INFO" "  - Network connectivity issues"
+        log "INFO" "  - SSH key not configured or invalid"
         log "INFO" "  - Invalid branch name"
         return 1
     fi
     
-    # Verify the installation
+    # Verify the installation structure
     if [ -d "$ENTERPRISE_DIR" ] && [ -f "$ENTERPRISE_DIR/__init__.py" ]; then
         log "SUCCESS" "✓ Enterprise repository structure verified"
+        return 0
     else
-        log "ERROR" "✗ Invalid repository structure"
+        log "ERROR" "✗ Invalid repository structure - missing __init__.py"
+        log "INFO" "Repository may be incomplete or corrupted"
         return 1
     fi
 }
