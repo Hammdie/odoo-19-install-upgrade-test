@@ -13,8 +13,6 @@
 #   sudo ./install-odoo-enterprise.sh
 ###############################################################################
 
-set -e  # Exit on any error
-
 # Configuration
 ENTERPRISE_DIR="/opt/odoo/enterprise"
 ENTERPRISE_REPO="https://github.com/odoo/enterprise.git"
@@ -418,21 +416,6 @@ show_summary() {
     echo
 }
 
-# Error cleanup function
-cleanup_on_error() {
-    log "ERROR" "Installation failed - cleaning up..."
-    
-    if [ -d "$ENTERPRISE_DIR" ]; then
-        log "INFO" "Removing incomplete installation..."
-        rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
-    fi
-    
-    log "INFO" "Check log file for details: $LOG_FILE"
-}
-
-# Trap to handle errors
-trap cleanup_on_error ERR
-
 # Main function
 main() {
     # Create log directory first
@@ -456,19 +439,42 @@ main() {
     echo
     
     # Installation steps
-    check_prerequisites
-    get_github_credentials
-    backup_existing_installation
-    create_directory_structure
+    check_prerequisites || { log "ERROR" "Prerequisites check failed"; exit 1; }
+    get_github_credentials || { log "ERROR" "GitHub credentials setup failed"; exit 1; }
+    backup_existing_installation || { log "ERROR" "Backup failed"; exit 1; }
+    create_directory_structure || { log "ERROR" "Directory creation failed"; exit 1; }
     
     if clone_enterprise_repository; then
-        set_permissions
-        validate_installation
-        show_configuration_hint
-        show_summary
-        log "SUCCESS" "Odoo Enterprise 19.0 installation completed successfully!"
+        if set_permissions; then
+            if validate_installation; then
+                show_configuration_hint
+                show_summary
+                log "SUCCESS" "Odoo Enterprise 19.0 installation completed successfully!"
+            else
+                log "ERROR" "Installation validation failed"
+                # Cleanup on validation failure
+                if [ -d "$ENTERPRISE_DIR" ]; then
+                    log "INFO" "Removing invalid installation..."
+                    rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
+                fi
+                exit 1
+            fi
+        else
+            log "ERROR" "Setting permissions failed"
+            # Cleanup on permission failure
+            if [ -d "$ENTERPRISE_DIR" ]; then
+                log "INFO" "Removing incomplete installation..."
+                rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
+            fi
+            exit 1
+        fi
     else
         log "ERROR" "Enterprise installation failed"
+        # Cleanup on clone failure
+        if [ -d "$ENTERPRISE_DIR" ]; then
+            log "INFO" "Removing incomplete installation..."
+            rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
+        fi
         exit 1
     fi
 }
