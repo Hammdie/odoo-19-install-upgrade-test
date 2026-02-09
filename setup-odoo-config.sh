@@ -66,7 +66,7 @@ create_log_dir() {
 
 # Check if running as root
 check_root() {
-    if [ $EUID -ne 0 ]; then
+    if [ "$(id -u)" != "0" ]; then
         echo -e "${RED}This script must be run as root or with sudo${NC}"
         echo -e "Please run: ${YELLOW}sudo $0${NC}"
         exit 1
@@ -172,9 +172,11 @@ get_admin_password() {
     echo -e "${BLUE}Leave empty to use default 'admin123'${NC}"
     echo
     
-    # First attempt
+    # First attempt - use stty for password input
     echo -n "Admin Password: "
-    read -s admin_pass1
+    stty -echo
+    read admin_pass1
+    stty echo
     echo
     
     # If empty, use default
@@ -184,7 +186,9 @@ get_admin_password() {
     else
         # Confirm password
         echo -n "Confirm Password: "
-        read -s admin_pass2
+        stty -echo
+        read admin_pass2
+        stty echo
         echo
         
         # Check if passwords match
