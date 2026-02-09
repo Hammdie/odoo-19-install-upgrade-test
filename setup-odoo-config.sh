@@ -215,43 +215,138 @@ install_configuration() {
     local temp_config="/tmp/odoo.conf.temp"
     
     log "INFO" "Installing new configuration..."
+    log "INFO" "Source: $config_source"
+    log "INFO" "Target: $config_target"
+    
+    # Check if source file exists and is readable
+    if [ ! -f "$config_source" ]; then
+        log "ERROR" "✗ Source configuration file not found: $config_source"
+        return 1
+    fi
+    
+    if [ ! -r "$config_source" ]; then
+        log "ERROR" "✗ Source configuration file not readable: $config_source"
+        return 1
+    fi
+    
+    log "SUCCESS" "✓ Source configuration file verified"
+    
+    # Show current config for debugging
+    log "INFO" "Current target config content (first 10 lines):"
+    if [ -f "$config_target" ]; then
+        head -10 "$config_target" | while read line; do
+            echo "    $line" | tee -a "$LOG_FILE"
+        done
+    else
+        echo "    File does not exist yet" | tee -a "$LOG_FILE"
+    fi
     
     # Ensure config directory exists
     if [ ! -d "$(dirname "$config_target")" ]; then
-        mkdir -p "$(dirname "$config_target")"
+        log "INFO" "Creating config directory: $(dirname "$config_target")"
+        if mkdir -p "$(dirname "$config_target")" 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "✓ Config directory created"
+        else
+            log "ERROR" "✗ Failed to create config directory"
+            return 1
+        fi
     fi
     
     # Copy configuration to temp file first
+    log "INFO" "Copying configuration to temp file..."
     if cp "$config_source" "$temp_config" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Configuration copied to temporary file"
+        log "SUCCESS" "✓ Configuration copied to temporary file: $temp_config"
     else
-        log "ERROR" "✗ Failed to copy configuration"
+        log "ERROR" "✗ Failed to copy configuration to temp file"
         return 1
     fi
+    
+    # Verify temp file was created correctly
+    if [ ! -f "$temp_config" ]; then
+        log "ERROR" "✗ Temp file was not created: $temp_config"
+        return 1
+    fi
+    
+    local temp_size=$(wc -c < "$temp_config" 2>/dev/null || echo "0")
+    log "INFO" "Temp file size: $temp_size bytes"
     
     # Replace the admin password in the temp file
     log "INFO" "Setting admin password in configuration..."
-    if sed -i "s/change_me_admin_password/$ADMIN_PASSWORD/g" "$temp_config" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Admin password configured"
+    log "INFO" "Replacing 'change_me_admin_password' with user password"
+    
+    # Use a more reliable sed approach
+    if sed "s/change_me_admin_password/$ADMIN_PASSWORD/g" "$temp_config" > "$temp_config.new" 2>&1 | tee -a "$LOG_FILE"; then
+        if mv "$temp_config.new" "$temp_config" 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "✓ Admin password configured in temp file"
+        else
+            log "ERROR" "✗ Failed to move temp file after password replacement"
+            rm -f "$temp_config" "$temp_config.new"
+            return 1
+        fi
     else
-        log "ERROR" "✗ Failed to set admin password"
-        rm -f "$temp_config"
+        log "ERROR" "✗ Failed to replace admin password"
+        rm -f "$temp_config" "$temp_config.new"
         return 1
     fi
     
+    # Verify password replacement worked
+    if grep -q "$ADMIN_PASSWORD" "$temp_config"; then
+        log "SUCCESS" "✓ Password replacement verified in temp file"
+    else
+        log "ERROR" "✗ Password replacement failed - admin password not found in temp file"
+        return 1
+    fi
+    
+    # Show temp file content for debugging (first 10 lines)
+    log "INFO" "Modified temp file content (first 10 lines):"
+    head -10 "$temp_config" | while read line; do
+        echo "    $line" | tee -a "$LOG_FILE"
+    done
+    
     # Move temp file to final location
+    log "INFO" "Moving temp file to final location..."
     if mv "$temp_config" "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "✓ Configuration installed: $config_target"
     else
-        log "ERROR" "✗ Failed to install configuration"
+        log "ERROR" "✗ Failed to install configuration from temp file"
         rm -f "$temp_config"
         return 1
     fi
     
+    # Verify final file exists and has content
+    if [ ! -f "$config_target" ]; then
+        log "ERROR" "✗ Final configuration file was not created: $config_target"
+        return 1
+    fi
+    
+    local final_size=$(wc -c < "$config_target" 2>/dev/null || echo "0")
+    log "INFO" "Final config file size: $final_size bytes"
+    
+    if [ "$final_size" -lt 100 ]; then
+        log "ERROR" "✗ Final configuration file seems too small ($final_size bytes)"
+        return 1
+    fi
+    
+    # Show final file content for debugging (first 10 lines)
+    log "INFO" "Final config file content (first 10 lines):"
+    head -10 "$config_target" | while read line; do
+        echo "    $line" | tee -a "$LOG_FILE"
+    done
+    
     # Set proper ownership and permissions
-    chown odoo:odoo "$config_target"
-    chmod 640 "$config_target"
-    log "SUCCESS" "✓ Configuration permissions set"
+    if chown odoo:odoo "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Configuration ownership set to odoo:odoo"
+    else
+        log "WARN" "⚠ Failed to set ownership (but file installed)"
+    fi
+    
+    if chmod 640 "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Configuration permissions set to 640"
+    else
+        log "WARN" "⚠ Failed to set permissions (but file installed)"
+    fi
+    
+    log "SUCCESS" "✓ Configuration installation completed successfully"
 }
 
 # Create directories from configuration
@@ -455,6 +550,29 @@ main() {
     
     if install_configuration "$config_source"; then
         log "SUCCESS" "Configuration installation completed"
+        
+        # Force verification that config was actually changed
+        log "INFO" "Verifying configuration was actually installed..."
+        if [ -f "/etc/odoo/odoo.conf" ]; then
+            if grep -q "addons_path.*usr/lib/python3" /etc/odoo/odoo.conf; then
+                log "SUCCESS" "✓ Configuration verification: Our addons_path found"
+            else
+                log "ERROR" "✗ Configuration verification failed: Our addons_path NOT found"
+                log "ERROR" "Current /etc/odoo/odoo.conf content:"
+                cat /etc/odoo/odoo.conf | tee -a "$LOG_FILE"
+                exit 1
+            fi
+            
+            if grep -q "$ADMIN_PASSWORD" /etc/odoo/odoo.conf; then
+                log "SUCCESS" "✓ Configuration verification: Admin password found"
+            else
+                log "ERROR" "✗ Configuration verification failed: Admin password NOT found"
+                exit 1
+            fi
+        else
+            log "ERROR" "✗ Configuration file /etc/odoo/odoo.conf does not exist!"
+            exit 1
+        fi
     else
         log "ERROR" "Configuration installation failed"
         exit 1
