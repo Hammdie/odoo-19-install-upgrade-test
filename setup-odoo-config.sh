@@ -122,11 +122,13 @@ find_config_source() {
     
     if [ -f "$config_source" ]; then
         log "SUCCESS" "✓ Found configuration source: $config_source"
-        echo "$config_source"
+        # Store in global variable instead of echo
+        CONFIG_SOURCE_FILE="$config_source"
+        return 0
     else
         log "ERROR" "✗ Configuration source not found: $config_source"
         echo -e "${RED}Please ensure config/odoo.conf.example exists${NC}"
-        exit 1
+        return 1
     fi
 }
 
@@ -538,8 +540,13 @@ main() {
     # Setup steps
     check_prerequisites
     
-    local config_source
-    config_source=$(find_config_source)
+    # Find config source
+    if find_config_source; then
+        log "SUCCESS" "Configuration source located: $CONFIG_SOURCE_FILE"
+    else
+        log "ERROR" "Failed to find configuration source"
+        exit 1
+    fi
     
     # Get admin password from user
     get_admin_password
@@ -548,7 +555,7 @@ main() {
     
     stop_odoo_service
     
-    if install_configuration "$config_source"; then
+    if install_configuration "$CONFIG_SOURCE_FILE"; then
         log "SUCCESS" "Configuration installation completed"
         
         # Force verification that config was actually changed
