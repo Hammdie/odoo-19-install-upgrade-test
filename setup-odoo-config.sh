@@ -589,6 +589,44 @@ main() {
     
     validate_configuration
     
+    # Restart Odoo service with new configuration
+    log "INFO" "Restarting Odoo service with new configuration..."
+    
+    # Force restart to ensure new config is loaded
+    if systemctl restart odoo 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Odoo service restarted with new configuration"
+    else
+        log "ERROR" "✗ Failed to restart Odoo service"
+        exit 1
+    fi
+    
+    # Wait for service to stabilize
+    log "INFO" "Waiting for service to stabilize..."
+    sleep 15
+    
+    # Check final service status
+    local service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
+    case $service_status in
+        "active")
+            log "SUCCESS" "✓ Odoo service is running successfully with new configuration"
+            ;;
+        "activating")
+            log "INFO" "Odoo service is still starting up..."
+            sleep 10
+            service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
+            if [ "$service_status" = "active" ]; then
+                log "SUCCESS" "✓ Odoo service is now running"
+            else
+                log "WARN" "⚠ Service status after extended wait: $service_status"
+            fi
+            ;;
+        *)
+            log "ERROR" "✗ Odoo service failed to start properly: $service_status"
+            log "INFO" "Recent service logs:"
+            journalctl -u odoo --no-pager -n 15 2>&1 | tee -a "$LOG_FILE"
+            ;;
+    esac
+    
     start_odoo_service
     
     # Show summary
