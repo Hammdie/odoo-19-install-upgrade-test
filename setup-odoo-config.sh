@@ -163,10 +163,52 @@ stop_odoo_service() {
     sleep 2
 }
 
+# Get admin password from user
+get_admin_password() {
+    log "INFO" "Admin password configuration..."
+    
+    echo -e "${YELLOW}Enter admin password for Odoo master password:${NC}"
+    echo -e "${BLUE}This password will be used for database operations and admin access.${NC}"
+    echo -e "${BLUE}Leave empty to use default 'admin123'${NC}"
+    echo
+    
+    # First attempt
+    echo -n "Admin Password: "
+    read -s admin_pass1
+    echo
+    
+    # If empty, use default
+    if [ -z "$admin_pass1" ]; then
+        admin_pass1="admin123"
+        log "INFO" "Using default password"
+    else
+        # Confirm password
+        echo -n "Confirm Password: "
+        read -s admin_pass2
+        echo
+        
+        # Check if passwords match
+        if [ "$admin_pass1" != "$admin_pass2" ]; then
+            log "ERROR" "Passwords do not match!"
+            echo -e "${RED}Passwords do not match. Please try again.${NC}"
+            echo
+            get_admin_password
+            return
+        fi
+        
+        log "SUCCESS" "Password confirmed"
+    fi
+    
+    # Store password globally
+    ADMIN_PASSWORD="$admin_pass1"
+    echo
+}
+
 # Install new configuration
 install_configuration() {
     local config_source="$1"
     local config_target="/etc/odoo/odoo.conf"
+    local temp_config="/tmp/odoo.conf.temp"
     
     log "INFO" "Installing new configuration..."
     
@@ -175,11 +217,30 @@ install_configuration() {
         mkdir -p "$(dirname "$config_target")"
     fi
     
-    # Copy configuration
-    if cp "$config_source" "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
+    # Copy configuration to temp file first
+    if cp "$config_source" "$temp_config" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Configuration copied to temporary file"
+    else
+        log "ERROR" "✗ Failed to copy configuration"
+        return 1
+    fi
+    
+    # Replace the admin password in the temp file
+    log "INFO" "Setting admin password in configuration..."
+    if sed -i "s/change_me_admin_password/$ADMIN_PASSWORD/g" "$temp_config" 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Admin password configured"
+    else
+        log "ERROR" "✗ Failed to set admin password"
+        rm -f "$temp_config"
+        return 1
+    fi
+    
+    # Move temp file to final location
+    if mv "$temp_config" "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "✓ Configuration installed: $config_target"
     else
         log "ERROR" "✗ Failed to install configuration"
+        rm -f "$temp_config"
         return 1
     fi
     
@@ -341,10 +402,11 @@ show_summary() {
     echo -e "  🔒 Memory limits: ${GREEN}2.5GB hard, 2GB soft${NC}"
     echo -e "  📊 Logging: ${GREEN}File-based (/var/log/odoo/odoo.log)${NC}"
     echo -e "  🚀 Performance tuning: ${GREEN}Enabled${NC}"
-    echo -e "  🔐 Security: ${GREEN}Admin password protection${NC}"
+    echo -e "  🔐 Security: ${GREEN}Admin password configured${NC}"
     echo
     echo -e "${BLUE}Next Steps:${NC}"
     echo -e "  🌐 Access Odoo: ${GREEN}http://localhost:8069${NC}"
+    echo -e "  🔑 Master Password: ${GREEN}[Set during configuration]${NC}"
     echo -e "  🔧 Check service: ${GREEN}sudo systemctl status odoo${NC}"
     echo -e "  📋 View logs: ${GREEN}sudo journalctl -u odoo -f${NC}"
     echo
@@ -379,6 +441,9 @@ main() {
     
     local config_source
     config_source=$(find_config_source)
+    
+    # Get admin password from user
+    get_admin_password
     
     backup_existing_config
     
