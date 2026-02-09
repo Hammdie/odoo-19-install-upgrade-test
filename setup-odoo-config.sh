@@ -193,38 +193,37 @@ install_configuration() {
 create_directories() {
     log "INFO" "Creating directories based on configuration..."
     
-    # Array of directories to create
-    local directories=(
-        "/var/log/odoo:odoo:odoo:755"
-        "/opt/odoo/.local:odoo:odoo:755"
-        "/opt/odoo/.local/share:odoo:odoo:755"
-        "/opt/odoo/.local/share/Odoo:odoo:odoo:755"
-        "/opt/odoo/addons:odoo:odoo:755"
-        "/opt/odoo/enterprise:odoo:odoo:755"
-        "/var/odoo_addons:odoo:odoo:755"
-    )
+    # Create directories one by one for shell compatibility
+    create_single_directory "/var/log/odoo" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo/.local" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo/.local/share" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo/.local/share/Odoo" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo/addons" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo/enterprise" "odoo" "odoo" "755"
+    create_single_directory "/var/odoo_addons" "odoo" "odoo" "755"
+}
+
+# Helper function to create a single directory
+create_single_directory() {
+    local dir_path="$1"
+    local dir_owner="$2"
+    local dir_group="$3"
+    local dir_perms="$4"
     
-    for dir_spec in "${directories[@]}"; do
-        local dir_path=$(echo "$dir_spec" | cut -d':' -f1)
-        local dir_owner=$(echo "$dir_spec" | cut -d':' -f2)
-        local dir_group=$(echo "$dir_spec" | cut -d':' -f3)
-        local dir_perms=$(echo "$dir_spec" | cut -d':' -f4)
-        
-        if [ ! -d "$dir_path" ]; then
-            if mkdir -p "$dir_path" 2>&1 | tee -a "$LOG_FILE"; then
-                chown "$dir_owner:$dir_group" "$dir_path"
-                chmod "$dir_perms" "$dir_path"
-                log "SUCCESS" "✓ Created directory: $dir_path"
-            else
-                log "ERROR" "✗ Failed to create directory: $dir_path"
-            fi
-        else
-            # Ensure correct ownership even if directory exists
+    if [ ! -d "$dir_path" ]; then
+        if mkdir -p "$dir_path" 2>&1 | tee -a "$LOG_FILE"; then
             chown "$dir_owner:$dir_group" "$dir_path"
             chmod "$dir_perms" "$dir_path"
-            log "SUCCESS" "✓ Directory exists and updated: $dir_path"
+            log "SUCCESS" "✓ Created directory: $dir_path"
+        else
+            log "ERROR" "✗ Failed to create directory: $dir_path"
         fi
-    done
+    else
+        # Ensure correct ownership even if directory exists
+        chown "$dir_owner:$dir_group" "$dir_path"
+        chmod "$dir_perms" "$dir_path"
+        log "SUCCESS" "✓ Directory exists and updated: $dir_path"
+    fi
 }
 
 # Start Odoo service
@@ -268,15 +267,24 @@ validate_configuration() {
         return 1
     fi
     
-    # Check for key configuration parameters
-    local required_params=("db_host" "db_port" "xmlrpc_port" "addons_path")
+    # Check for key configuration parameters using simple approach
     local missing_params=""
     
-    for param in "${required_params[@]}"; do
-        if ! grep -q "^$param" "$config_file"; then
-            missing_params="$missing_params $param"
-        fi
-    done
+    if ! grep -q "^db_host" "$config_file"; then
+        missing_params="$missing_params db_host"
+    fi
+    
+    if ! grep -q "^db_port" "$config_file"; then
+        missing_params="$missing_params db_port"
+    fi
+    
+    if ! grep -q "^xmlrpc_port" "$config_file"; then
+        missing_params="$missing_params xmlrpc_port"
+    fi
+    
+    if ! grep -q "^addons_path" "$config_file"; then
+        missing_params="$missing_params addons_path"
+    fi
     
     if [ -n "$missing_params" ]; then
         log "WARN" "⚠ Missing configuration parameters:$missing_params"
@@ -286,10 +294,18 @@ validate_configuration() {
     
     # Display key configuration values
     log "INFO" "Configuration summary:"
-    for param in "${required_params[@]}"; do
-        local value=$(grep "^$param" "$config_file" | cut -d'=' -f2- | xargs 2>/dev/null || echo "not set")
-        log "INFO" "  $param = $value"
-    done
+    
+    local db_host=$(grep "^db_host" "$config_file" | cut -d'=' -f2- | xargs 2>/dev/null || echo "not set")
+    log "INFO" "  db_host = $db_host"
+    
+    local db_port=$(grep "^db_port" "$config_file" | cut -d'=' -f2- | xargs 2>/dev/null || echo "not set")
+    log "INFO" "  db_port = $db_port"
+    
+    local xmlrpc_port=$(grep "^xmlrpc_port" "$config_file" | cut -d'=' -f2- | xargs 2>/dev/null || echo "not set")
+    log "INFO" "  xmlrpc_port = $xmlrpc_port"
+    
+    local addons_path=$(grep "^addons_path" "$config_file" | cut -d'=' -f2- | xargs 2>/dev/null || echo "not set")
+    log "INFO" "  addons_path = $addons_path"
 }
 
 # Show summary
