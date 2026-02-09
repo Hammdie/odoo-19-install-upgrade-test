@@ -94,8 +94,8 @@ get_domain_name() {
     log "INFO" "Domain-Konfiguration..."
     
     echo -e "${YELLOW}Geben Sie Ihren Domain-Namen ein:${NC}"
-    echo -e "${BLUE}Beispiele: example.com, mysite.de, company.org${NC}"
-    echo -e "${BLUE}Hinweis: www-Subdomain wird automatisch hinzugefügt${NC}"
+    echo -e "${BLUE}Beispiele: ecowatt.detalex.de, example.com, mysite.de${NC}"
+    echo -e "${BLUE}Hinweis: Nur exakte Domain ohne www-Prefix${NC}"
     echo
     
     while true; do
@@ -114,7 +114,7 @@ get_domain_name() {
         if echo "$domain_clean" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; then
             DOMAIN_NAME="$domain_clean"
             log "SUCCESS" "Domain konfiguriert: $DOMAIN_NAME"
-            echo -e "${GREEN}Domain wird konfiguriert: $DOMAIN_NAME und www.$DOMAIN_NAME${NC}"
+            echo -e "${GREEN}Domain wird konfiguriert: $DOMAIN_NAME${NC}"
             break
         else
             echo -e "${RED}Ungültiger Domain-Name. Bitte versuchen Sie es erneut.${NC}"
@@ -194,7 +194,7 @@ upstream odoochat {
 
 server {
     listen 80;
-    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+    server_name $DOMAIN_NAME;
 
     access_log /var/log/nginx/odoo.access.log;
     error_log /var/log/nginx/odoo.error.log;
@@ -307,7 +307,7 @@ setup_ssl_certificates() {
     # Get SSL certificate with Certbot
     log "INFO" "Requesting SSL certificate from Let's Encrypt..."
     
-    # Run certbot with nginx plugin
+    # Run certbot with nginx plugin for single domain only
     if certbot --nginx \
         --non-interactive \
         --agree-tos \
@@ -315,13 +315,13 @@ setup_ssl_certificates() {
         --expand \
         --email "admin@$DOMAIN_NAME" \
         -d "$DOMAIN_NAME" \
-        -d "www.$DOMAIN_NAME" \
         2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "✓ SSL certificates installed successfully"
+        return 0
     else
-        log "WARN" "⚠ SSL certificate installation failed"
+        log "ERROR" "✗ SSL certificate installation failed"
         log "INFO" "You can run SSL setup manually later with:"
-        log "INFO" "sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME"
+        log "INFO" "sudo certbot --nginx -d $DOMAIN_NAME"
         return 1
     fi
     
@@ -405,7 +405,7 @@ show_summary() {
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
     echo -e "${BLUE}Konfiguration:${NC}"
-    echo -e "  🌐 Domain: ${GREEN}$DOMAIN_NAME${NC} und ${GREEN}www.$DOMAIN_NAME${NC}"
+    echo -e "  🌐 Domain: ${GREEN}$DOMAIN_NAME${NC}"
     echo -e "  🔀 Reverse Proxy: ${GREEN}Nginx → Odoo (Port 8069)${NC}"
     echo -e "  💬 WebSocket: ${GREEN}Nginx → Odoo Chat (Port 8072)${NC}"
     echo -e "  📁 Config File: ${GREEN}/etc/nginx/sites-available/odoo${NC}"
@@ -413,12 +413,14 @@ show_summary() {
     echo -e "${BLUE}Web-Zugriff:${NC}"
     if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
         echo -e "  🔐 HTTPS: ${GREEN}https://$DOMAIN_NAME${NC} ${BOLD}(SSL aktiv)${NC}"
-        echo -e "  🔐 HTTPS (www): ${GREEN}https://www.$DOMAIN_NAME${NC}"
         echo -e "  🔄 HTTP Redirect: ${GREEN}Automatische Weiterleitung zu HTTPS${NC}"
     else
         echo -e "  🌍 HTTP: ${GREEN}http://$DOMAIN_NAME${NC}"
-        echo -e "  🌍 HTTP (www): ${GREEN}http://www.$DOMAIN_NAME${NC}"
-        echo -e "  ⚠️  SSL: ${YELLOW}Nicht konfiguriert${NC}"
+        if [ "$SSL_SUCCESS" = "false" ]; then
+            echo -e "  ⚠️  SSL: ${RED}Fehlgeschlagen${NC} ${YELLOW}(Nur HTTP verfügbar)${NC}"
+        else
+            echo -e "  ⚠️  SSL: ${YELLOW}Nicht konfiguriert${NC}"
+        fi
     fi
     echo
     if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
@@ -429,7 +431,7 @@ show_summary() {
         echo -e "  🔄 Auto-Renewal: ${GREEN}Aktiviert${NC}"
     else
         echo -e "${BLUE}SSL-Zertifikat Setup (manuell):${NC}"
-        echo -e "  🔐 SSL-Zertifikat erstellen: ${GREEN}sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME${NC}"
+        echo -e "  🔐 SSL-Zertifikat erstellen: ${GREEN}sudo certbot --nginx -d $DOMAIN_NAME${NC}"
     fi
     echo
     echo -e "${BLUE}Nützliche Befehle:${NC}"
@@ -484,11 +486,15 @@ main() {
     install_certbot
     
     # SSL Setup (can fail gracefully)
+    SSL_SUCCESS=false
     if setup_ssl_certificates; then
         log "SUCCESS" "SSL certificates configured successfully"
+        SSL_SUCCESS=true
     else
-        log "WARN" "SSL setup failed - continuing without SSL"
-        log "INFO" "You can set up SSL manually later with: sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME"
+        log "ERROR" "SSL setup failed - continuing without SSL"
+        log "INFO" "HTTPS will not be available until SSL is configured"
+        log "INFO" "You can set up SSL manually later with: sudo certbot --nginx -d $DOMAIN_NAME"
+        SSL_SUCCESS=false
     fi
     
     test_setup
