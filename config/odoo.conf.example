@@ -18,7 +18,7 @@ xmlrpc_interface =
 longpolling_port = 8072
 
 # Logging
-logfile = /var/log/odoo/odoo.log
+logfile = /var/log/odoo/odoo-server.log
 log_level = info
 log_db = False
 log_handler = :INFO

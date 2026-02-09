@@ -501,7 +501,7 @@ show_summary() {
     echo -e "${BLUE}Configuration Features:${NC}"
     echo -e "  ⚡ Workers: ${GREEN}4 (optimized for production)${NC}"
     echo -e "  🔒 Memory limits: ${GREEN}2.5GB hard, 2GB soft${NC}"
-    echo -e "  📊 Logging: ${GREEN}File-based (/var/log/odoo/odoo.log)${NC}"
+    echo -e "  📊 Logging: ${GREEN}/var/log/odoo/odoo-server.log${NC}"
     echo -e "  🚀 Performance tuning: ${GREEN}Enabled${NC}"
     echo -e "  🔐 Security: ${GREEN}Admin password configured${NC}"
     echo
