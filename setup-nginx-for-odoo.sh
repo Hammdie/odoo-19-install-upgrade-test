@@ -281,6 +281,67 @@ EOF
     fi
 }
 
+# Install Certbot
+install_certbot() {
+    log "INFO" "Installing Certbot for SSL certificates..."
+    
+    # Update package list
+    apt update 2>&1 | tee -a "$LOG_FILE"
+    
+    # Install Certbot and Nginx plugin
+    if apt install -y certbot python3-certbot-nginx 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Certbot installed successfully"
+    else
+        log "ERROR" "✗ Failed to install Certbot"
+        return 1
+    fi
+}
+
+# Setup SSL certificates with Certbot
+setup_ssl_certificates() {
+    log "INFO" "Setting up SSL certificates for $DOMAIN_NAME..."
+    
+    # Verify domain is accessible before getting certificate
+    log "INFO" "Testing domain accessibility..."
+    
+    # Get SSL certificate with Certbot
+    log "INFO" "Requesting SSL certificate from Let's Encrypt..."
+    
+    # Run certbot with nginx plugin
+    if certbot --nginx \
+        --non-interactive \
+        --agree-tos \
+        --redirect \
+        --expand \
+        --email "admin@$DOMAIN_NAME" \
+        -d "$DOMAIN_NAME" \
+        -d "www.$DOMAIN_NAME" \
+        2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ SSL certificates installed successfully"
+    else
+        log "WARN" "⚠ SSL certificate installation failed"
+        log "INFO" "You can run SSL setup manually later with:"
+        log "INFO" "sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME"
+        return 1
+    fi
+    
+    # Test SSL configuration
+    if nginx -t 2>&1 | tee -a "$LOG_FILE"; then
+        log "SUCCESS" "✓ Nginx SSL configuration is valid"
+        
+        # Reload Nginx to apply SSL configuration
+        if systemctl reload nginx 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "✓ Nginx reloaded with SSL configuration"
+        else
+            log "ERROR" "✗ Failed to reload Nginx with SSL"
+            return 1
+        fi
+    else
+        log "ERROR" "✗ Nginx SSL configuration has errors"
+        return 1
+    fi
+}
+
 # Configure firewall
 configure_firewall() {
     log "INFO" "Configuring firewall for web traffic..."
@@ -303,11 +364,20 @@ configure_firewall() {
 test_setup() {
     log "INFO" "Testing Nginx and Odoo integration..."
     
-    # Test Nginx is responding
+    # Test Nginx is responding on HTTP
     if curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "200\|302\|301"; then
-        log "SUCCESS" "✓ Nginx is responding on port 80"
+        log "SUCCESS" "✓ Nginx is responding on port 80 (HTTP)"
     else
         log "WARN" "⚠ Nginx may not be responding correctly on port 80"
+    fi
+    
+    # Test HTTPS if SSL is configured
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        if curl -s -k -o /dev/null -w "%{http_code}" https://localhost | grep -q "200\|302\|301"; then
+            log "SUCCESS" "✓ Nginx is responding on port 443 (HTTPS)"
+        else
+            log "WARN" "⚠ Nginx may not be responding correctly on port 443"
+        fi
     fi
     
     # Test if Odoo is reachable through Nginx
@@ -331,7 +401,7 @@ test_setup() {
 show_summary() {
     echo
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}  Nginx Setup für Odoo abgeschlossen!${NC}"
+    echo -e "${GREEN}${BOLD}  Nginx + SSL Setup für Odoo abgeschlossen!${NC}"
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo
     echo -e "${BLUE}Konfiguration:${NC}"
@@ -341,18 +411,36 @@ show_summary() {
     echo -e "  📁 Config File: ${GREEN}/etc/nginx/sites-available/odoo${NC}"
     echo
     echo -e "${BLUE}Web-Zugriff:${NC}"
-    echo -e "  🌍 HTTP: ${GREEN}http://$DOMAIN_NAME${NC}"
-    echo -e "  🌍 HTTP (www): ${GREEN}http://www.$DOMAIN_NAME${NC}"
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        echo -e "  🔐 HTTPS: ${GREEN}https://$DOMAIN_NAME${NC} ${BOLD}(SSL aktiv)${NC}"
+        echo -e "  🔐 HTTPS (www): ${GREEN}https://www.$DOMAIN_NAME${NC}"
+        echo -e "  🔄 HTTP Redirect: ${GREEN}Automatische Weiterleitung zu HTTPS${NC}"
+    else
+        echo -e "  🌍 HTTP: ${GREEN}http://$DOMAIN_NAME${NC}"
+        echo -e "  🌍 HTTP (www): ${GREEN}http://www.$DOMAIN_NAME${NC}"
+        echo -e "  ⚠️  SSL: ${YELLOW}Nicht konfiguriert${NC}"
+    fi
     echo
-    echo -e "${BLUE}SSL-Zertifikat Setup (nächster Schritt):${NC}"
-    echo -e "  📜 Certbot installieren: ${GREEN}sudo apt install certbot python3-certbot-nginx${NC}"
-    echo -e "  🔐 SSL-Zertifikat erstellen: ${GREEN}sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME${NC}"
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        echo -e "${BLUE}SSL-Zertifikat:${NC}"
+        echo -e "  🔐 Status: ${GREEN}Aktiv (Let's Encrypt)${NC}"
+        echo -e "  📜 Zertifikat: ${GREEN}/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem${NC}"
+        echo -e "  🔑 Privater Schlüssel: ${GREEN}/etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem${NC}"
+        echo -e "  🔄 Auto-Renewal: ${GREEN}Aktiviert${NC}"
+    else
+        echo -e "${BLUE}SSL-Zertifikat Setup (manuell):${NC}"
+        echo -e "  🔐 SSL-Zertifikat erstellen: ${GREEN}sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME${NC}"
+    fi
     echo
     echo -e "${BLUE}Nützliche Befehle:${NC}"
     echo -e "  📊 Nginx Status: ${GREEN}sudo systemctl status nginx${NC}"
     echo -e "  🔄 Nginx Reload: ${GREEN}sudo systemctl reload nginx${NC}"
     echo -e "  📋 Nginx Logs: ${GREEN}sudo tail -f /var/log/nginx/odoo.access.log${NC}"
     echo -e "  🔧 Config Test: ${GREEN}sudo nginx -t${NC}"
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        echo -e "  🔐 SSL Status: ${GREEN}sudo certbot certificates${NC}"
+        echo -e "  🔄 SSL Renewal Test: ${GREEN}sudo certbot renew --dry-run${NC}"
+    fi
     echo
     echo -e "${BLUE}Firewall:${NC}"
     echo -e "  ✅ Port 80 (HTTP): ${GREEN}Geöffnet${NC}"
@@ -393,6 +481,16 @@ main() {
     install_nginx
     create_nginx_config
     configure_firewall
+    install_certbot
+    
+    # SSL Setup (can fail gracefully)
+    if setup_ssl_certificates; then
+        log "SUCCESS" "SSL certificates configured successfully"
+    else
+        log "WARN" "SSL setup failed - continuing without SSL"
+        log "INFO" "You can set up SSL manually later with: sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME"
+    fi
+    
     test_setup
     
     # Show summary
