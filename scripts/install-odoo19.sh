@@ -758,14 +758,39 @@ install_pgvector() {
     fi
 }
 
-# Create systemd service
+# Create systemd service with robust error handling
 create_systemd_service() {
     log "INFO" "Creating systemd service for Odoo..."
     
-    # Odoo 19.0 no longer supports --daemon, use Type=simple instead of forking
+    # Remove any existing service first
+    if systemctl list-unit-files 2>/dev/null | grep -q "^odoo.service"; then
+        log "WARN" "Existing Odoo service found - removing first..."
+        systemctl stop odoo 2>/dev/null || true
+        systemctl disable odoo 2>/dev/null || true
+        rm -f /etc/systemd/system/odoo.service
+        systemctl daemon-reload
+    fi
+    
+    # Verify configuration file exists
+    if [[ ! -f "$ODOO_CONFIG" ]]; then
+        log "ERROR" "Odoo configuration file not found: $ODOO_CONFIG"
+        log "ERROR" "Cannot create service without configuration"
+        return 1
+    fi
+    
+    # Verify Odoo installation exists
+    if [[ ! -d "$ODOO_HOME/odoo" ]] || [[ ! -f "$ODOO_HOME/odoo/setup.py" ]]; then
+        log "ERROR" "Odoo installation not found or incomplete at: $ODOO_HOME/odoo"
+        log "ERROR" "Cannot create service without Odoo installation"
+        return 1
+    fi
+    
+    # Create service file with enhanced configuration
+    log "INFO" "Creating service file: /etc/systemd/system/odoo.service"
+    
     cat > /etc/systemd/system/odoo.service << EOF
 [Unit]
-Description=Odoo 19.0
+Description=Odoo 19.0 ERP and CRM
 Documentation=http://www.odoo.com
 Requires=postgresql.service
 After=network.target postgresql.service
@@ -775,43 +800,106 @@ Type=simple
 User=$ODOO_USER
 Group=$ODOO_USER
 WorkingDirectory=$ODOO_HOME/odoo
-ExecStart=/usr/bin/python3 -m odoo --config=$ODOO_CONFIG
+Environment=PYTHONPATH=$ODOO_HOME/odoo:$ODOO_HOME/custom-addons
+ExecStart=/usr/bin/python3 -m odoo --config=$ODOO_CONFIG --no-daemon
 ExecReload=/bin/kill -s HUP \$MAINPID
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 KillMode=mixed
-TimeoutStopSec=60
+TimeoutStartSec=300
+TimeoutStopSec=120
 
 # Logging
-StandardOutput=journal
-StandardError=journal
+StandardOutput=journal+console
+StandardError=journal+console
 SyslogIdentifier=odoo
 
 # Security settings
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/log/odoo $ODOO_HOME /tmp
+ReadWritePaths=/var/log/odoo $ODOO_HOME /tmp /var/lib/odoo
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
 
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=65535
+
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    # Create log directory
+    
+    # Verify service file was created correctly
+    if [[ ! -f "/etc/systemd/system/odoo.service" ]]; then
+        log "ERROR" "Failed to create service file"
+        return 1
+    fi
+    
+    # Create log directory with proper permissions
+    log "INFO" "Setting up log directory..."
     mkdir -p /var/log/odoo
     chown "$ODOO_USER:$ODOO_USER" /var/log/odoo
+    chmod 755 /var/log/odoo
     
-    # Create tmpfiles.d configuration (no longer need PID directory for Type=simple)
+    # Create data directory if needed
+    mkdir -p /var/lib/odoo
+    chown "$ODOO_USER:$ODOO_USER" /var/lib/odoo
+    chmod 755 /var/lib/odoo
+    
+    # Create tmpfiles.d configuration
     cat > /etc/tmpfiles.d/odoo.conf << EOF
 d /var/log/odoo 0755 $ODOO_USER $ODOO_USER -
+d /var/lib/odoo 0755 $ODOO_USER $ODOO_USER -
 EOF
     
-    # Reload systemd
+    # Reload systemd and validate
+    log "INFO" "Reloading systemd daemon..."
     systemctl daemon-reload
     
-    log "SUCCESS" "Systemd service created"
+    # Verify systemd recognizes the service
+    if ! systemctl list-unit-files 2>/dev/null | grep -q "^odoo.service"; then
+        log "ERROR" "Systemd does not recognize odoo.service after creation"
+        log "ERROR" "Service file may be corrupted or systemd issue"
+        
+        # Try to diagnose
+        log "INFO" "Diagnosing service file..."
+        if systemd-analyze verify /etc/systemd/system/odoo.service 2>&1 | tee -a "$LOG_FILE"; then
+            log "INFO" "Service file syntax appears correct"
+        else
+            log "ERROR" "Service file has syntax errors"
+            return 1
+        fi
+        
+        # Force reload and try again
+        log "INFO" "Force reloading systemd..."
+        systemctl daemon-reexec
+        systemctl daemon-reload
+        sleep 2
+        
+        if ! systemctl list-unit-files 2>/dev/null | grep -q "^odoo.service"; then
+            log "ERROR" "Still cannot detect odoo.service after force reload"
+            return 1
+        fi
+    fi
+    
+    # Enable the service
+    log "INFO" "Enabling Odoo service..."
+    if ! systemctl enable odoo 2>&1 | tee -a "$LOG_FILE"; then
+        log "ERROR" "Failed to enable Odoo service"
+        return 1
+    fi
+    
+    # Verify service status
+    local service_status=$(systemctl is-enabled odoo 2>/dev/null || echo "unknown")
+    if [[ "$service_status" == "enabled" ]]; then
+        log "SUCCESS" "Odoo service created and enabled successfully"
+    else
+        log "ERROR" "Service created but not properly enabled (status: $service_status)"
+        return 1
+    fi
+    
+    log "SUCCESS" "Systemd service configuration completed"
 }
 
 # Install Odoo as Python package
@@ -865,33 +953,122 @@ EOF
     log "SUCCESS" "Log rotation configured"
 }
 
-# Test Odoo installation
+# Test Odoo installation with enhanced validation
 test_installation() {
     log "INFO" "Testing Odoo installation..."
     
+    # Verify service exists
+    if ! systemctl list-unit-files 2>/dev/null | grep -q "^odoo.service"; then
+        log "ERROR" "Odoo service not found in systemd"
+        log "ERROR" "Service creation failed - attempting emergency repair..."
+        
+        # Try to repair service creation
+        if create_systemd_service; then
+            log "SUCCESS" "Service repaired successfully"
+        else
+            log "ERROR" "Service repair failed - cannot continue"
+            log "ERROR" "Manual intervention required"
+            return 1
+        fi
+    fi
+    
     # Start Odoo service
-    systemctl enable odoo
-    systemctl start odoo
+    log "INFO" "Starting Odoo service..."
     
-    # Wait for service to start
-    sleep 10
+    # Stop any existing instance first
+    systemctl stop odoo 2>/dev/null || true
+    sleep 2
     
-    # Give Odoo a moment to fully start
-    sleep 5
+    # Start the service with detailed logging
+    if ! systemctl start odoo; then
+        log "ERROR" "Failed to start Odoo service"
+        
+        # Detailed diagnostics
+        log "INFO" "Service status:"
+        systemctl status odoo --no-pager -l 2>&1 | tee -a "$LOG_FILE"
+        
+        log "INFO" "Recent logs:"
+        journalctl -u odoo --no-pager -n 20 2>&1 | tee -a "$LOG_FILE"
+        
+        # Try to identify common issues
+        local service_logs=$(journalctl -u odoo --no-pager -n 50 2>/dev/null)
+        
+        if echo "$service_logs" | grep -qi "no module named.*odoo"; then
+            log "ERROR" "Odoo module not found - Python installation issue"
+            log "ERROR" "Run: sudo /var/odoo-upgrade-cron/fix-python-dependencies.sh"
+        elif echo "$service_logs" | grep -qi "permission denied"; then
+            log "ERROR" "Permission denied - fixing permissions..."
+            chown -R "$ODOO_USER:$ODOO_USER" "$ODOO_HOME"
+            chown -R "$ODOO_USER:$ODOO_USER" "/var/log/odoo"
+            
+            # Retry after permission fix
+            log "INFO" "Retrying service start after permission fix..."
+            if systemctl start odoo; then
+                log "SUCCESS" "Service started after permission repair"
+            else
+                log "ERROR" "Service still failing after permission fix"
+                return 1
+            fi
+        elif echo "$service_logs" | grep -qi "database.*does not exist"; then
+            log "WARN" "Database not created yet - this is normal for fresh installation"
+            log "INFO" "Service should start anyway for initial setup"
+        elif echo "$service_logs" | grep -qi "config.*not found"; then
+            log "ERROR" "Configuration file issue"
+            log "ERROR" "Check: $ODOO_CONFIG"
+            return 1
+        else
+            log "ERROR" "Unknown service startup issue"
+            log "ERROR" "Check logs: sudo journalctl -u odoo -f"
+            return 1
+        fi
+    fi
     
-    # Check if service is running
-    local service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
-    log "INFO" "Odoo service status: $service_status"
+    # Wait for service to stabilize
+    log "INFO" "Waiting for Odoo to start..."
+    local wait_count=0
+    local max_wait=30
     
-    if [[ "$service_status" == "active" ]]; then
-        log "SUCCESS" "Odoo service is running"
+    while [[ $wait_count -lt $max_wait ]]; do
+        sleep 1
+        ((wait_count++))
+        
+        local service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
+        
+        if [[ "$service_status" == "active" ]]; then
+            log "SUCCESS" "Odoo service is running (wait time: ${wait_count}s)"
+            break
+        elif [[ "$service_status" == "failed" ]]; then
+            log "ERROR" "Odoo service failed during startup"
+            systemctl status odoo --no-pager -l 2>&1 | tee -a "$LOG_FILE"
+            return 1
+        elif [[ "$service_status" == "activating" ]]; then
+            if [[ $wait_count -eq $max_wait ]]; then
+                log "WARN" "Service still activating after ${max_wait}s - may be slow startup"
+                break
+            fi
+        else
+            log "WARN" "Service status: $service_status (${wait_count}s)"
+        fi
+    done
+    
+    # Final status check
+    local final_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
+    log "INFO" "Final service status: $final_status"
+    
+    if [[ "$final_status" == "active" ]]; then
+        log "SUCCESS" "Odoo service is running successfully"
         
         # Check if port is listening
         if ss -tuln | grep -q ":8069 "; then
             log "SUCCESS" "Odoo is listening on port 8069"
         else
             log "WARN" "Port 8069 not ready yet - checking again"
-            sleep 3
+            sleep 5
+            if ss -tuln | grep -q ":8069 "; then
+                log "SUCCESS" "Odoo is now listening on port 8069"
+            else
+                log "WARN" "Port 8069 still not responding - may need more time"
+            fi
         fi
         
         # Quick response test (don't fail if no response)
@@ -899,21 +1076,31 @@ test_installation() {
         if [[ "$response_code" =~ ^(200|302)$ ]]; then
             log "SUCCESS" "Odoo is responding (HTTP $response_code)"
         else
-            log "INFO" "Odoo service started but not responding yet (this is normal)"
-            log "INFO" "Odoo may take a few minutes to initialize the database"
+            log "INFO" "Odoo service started but web interface not responding yet (this is normal)"
+            log "INFO" "Odoo may take a few minutes to initialize"
         fi
         
-        log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
+        # Show access info
+        local server_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
+        log "INFO" "Access via: http://${server_ip}:8069"
         
-    elif [[ "$service_status" == "activating" ]]; then
-        log "INFO" "Odoo service is starting up..."
-        log "INFO" "Access via: http://$(hostname -I | awk '{print $1}'):8069"
+        return 0
+        
+    elif [[ "$final_status" == "activating" ]]; then
+        log "INFO" "Odoo service is starting up (may take a few minutes)..."
+        log "INFO" "Access via: http://localhost:8069"
+        return 0
         
     else
-        log "ERROR" "Failed to start Odoo service (status: $service_status)"
+        log "ERROR" "Odoo service failed to start properly (status: $final_status)"
         log "INFO" "Check status: systemctl status odoo"
         log "INFO" "Check logs: journalctl -u odoo -f"
-        # Don't exit - let the user investigate
+        
+        # Show recent errors for immediate troubleshooting
+        log "INFO" "Recent error logs:"
+        journalctl -u odoo --no-pager -n 10 2>&1 | tee -a "$LOG_FILE"
+        
+        return 1
     fi
 }
 

@@ -20,6 +20,9 @@ Dieses Repository enthält Shell-Scripts und Konfigurationsdateien für die voll
 - 👤 Automatische PostgreSQL-Benutzerberechtigungen
 - ⚙️ Erkennung und Schonung vorhandener Odoo-Installationen
 - 🐍 Kompatibel mit Ubuntu 22.04/24.04 „Externally Managed Environment" (pip --break-system-packages)
+- 🚨 **Emergency Service Repair** – Automatische Systemd-Service-Reparatur
+- 🔍 **Comprehensive Diagnostics** – Vollständige Diagnose-Tools für alle Odoo-Komponenten
+- ⚡ **Robuste Service-Erstellung** – Mehrfache Validierung und automatische Fehlerbehebung
 
 ## Voraussetzungen
 
@@ -441,10 +444,126 @@ Die Cron-Jobs werden in `config/crontab` definiert:
 
 ### Verfügbare Scripts
 
+#### Installations-Scripts
 | Script | Beschreibung | Version |
 |--------|-------------|---------|
 | `install.sh` | Hauptinstallationsscript mit Erkennung vorhandener Installationen | 1.2.0 |
+| `scripts/install-odoo19.sh` | Odoo 19.0 Installation mit robuster Service-Erstellung | 1.2.1 |
+| `scripts/install-enterprise.sh` | Odoo Enterprise Installation (SSH-Schlüssel erforderlich) | 1.2.1 |
 | `scripts/upgrade-system.sh` | System-Pakete aktualisieren | 1.2.0 |
+
+#### Wartungs-Scripts
+| Script | Beschreibung | Version |
+|--------|-------------|---------|
+| `scripts/daily-maintenance.sh` | Tägliche Wartungsaufgaben | 1.1.0 |
+| `scripts/weekly-odoo-update.sh` | Wöchentliche Odoo-Updates | 1.1.0 |
+| `scripts/backup-odoo.sh` | Odoo Backup (Datenbank + Dateien) | 1.1.0 |
+| `scripts/restore-odoo.sh` | Odoo Wiederherstellung | 1.1.0 |
+| `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.1.0 |
+
+#### Reparatur- und Diagnose-Scripts
+| Script | Beschreibung | Version |
+|--------|-------------|---------|
+| **`emergency-service-repair.sh`** | **🚨 Sofortige Reparatur von Systemd-Service-Problemen** | **1.0.0** |
+| **`diagnose-service.sh`** | **🔍 Umfassende Diagnose aller Odoo-Komponenten** | **1.0.0** |
+| `fix-python-dependencies.sh` | Python-Abhängigkeiten reparieren (zope.event, etc.) | 1.2.1 |
+| `fix-installation.sh` | Allgemeine Installationsreparatur | 1.1.0 |
+| `fix-postgres-auth.sh` | PostgreSQL-Authentifizierung reparieren | 1.1.0 |
+| `fix-odoo-dependencies.sh` | Odoo-spezifische Dependencies reparieren | 1.1.0 |
+| `fix-wkhtmltopdf.sh` | wkhtmltopdf Qt-Patch Installation reparieren | 1.1.0 |
+| `repair-database.sh` | Datenbank-Reparaturen | 1.1.0 |
+
+#### Test- und Diagnose-Scripts
+| Script | Beschreibung | Version |
+|--------|-------------|---------|
+| `test-odoo-dependencies.sh` | Testet alle Odoo-Abhängigkeiten umfassend | 1.1.0 |
+| `test-odoo-user-permissions.sh` | Testet odoo-Benutzer Datenbankberechtigungen | 1.1.0 |
+| `test-cron.sh` | Testet Cron-Job-Konfiguration | 1.1.0 |
+| `test-fixes.sh` | Testet alle Reparatur-Scripts | 1.1.0 |
+| `show-error-log.sh` | Zeigt aktuelle Odoo-Error-Logs | 1.1.0 |
+| `quick-diagnosis.sh` | Schnelle System-Diagnose | 1.1.0 |
+
+## 🚨 Emergency Troubleshooting
+
+### Häufige Probleme und Sofortlösungen
+
+#### 1. Service startet nicht / Service fehlt
+```bash
+# Vollständige Diagnose aller Komponenten
+sudo ./diagnose-service.sh
+
+# Sofortlösung für Service-Probleme
+sudo ./emergency-service-repair.sh
+```
+
+#### 2. Python-Dependency-Fehler (zope.event, psycopg2, etc.)
+```bash
+# Repariert alle Python-Abhängigkeiten automatisch
+sudo ./fix-python-dependencies.sh
+
+# Alternative: Manuelle Überprüfung
+python3 -c "import odoo; print('Odoo imports OK')"
+python3 -c "import zope.event; print('zope.event OK')"
+python3 -c "import psycopg2; print('psycopg2 OK')"
+```
+
+#### 3. Service läuft, aber Port 8069 nicht erreichbar
+```bash
+# Prüfe Service-Status
+sudo systemctl status odoo
+
+# Prüfe offene Ports
+sudo ss -tuln | grep 8069
+
+# Firewall-Problem beheben
+sudo ./fix-firewall.sh
+```
+
+#### 4. Datenbank-Verbindungsfehler
+```bash
+# PostgreSQL-Authentifizierung reparieren
+sudo ./fix-postgres-auth.sh
+
+# Datenbank-Berechtigungen prüfen
+sudo ./test-odoo-user-permissions.sh
+```
+
+#### 5. Nach Installation: "Odoo service was not created"
+```bash
+# Dies ist das häufigste Problem - verwende die Emergency-Reparatur:
+sudo ./emergency-service-repair.sh
+
+# Falls das nicht hilft, detaillierte Diagnose:
+sudo ./diagnose-service.sh
+```
+
+### Schnell-Diagnose
+```bash
+# Ein-Kommando-Diagnose für alle kritischen Komponenten:
+sudo ./diagnose-service.sh
+
+# Das zeigt:
+# ✓ System-Voraussetzungen
+# ✓ Odoo-User und Berechtigungen  
+# ✓ Installation und Konfiguration
+# ✓ Python-Dependencies
+# ✓ Systemd-Service-Status
+# ✓ Netzwerk und Ports
+# ✓ Log-Dateien
+# ✓ Konkrete Handlungsempfehlungen
+```
+
+### Log-Analyse
+```bash
+# Live Odoo-Logs verfolgen
+sudo journalctl -u odoo -f
+
+# Letzte 50 Zeilen
+sudo journalctl -u odoo -n 50
+
+# Fehler der letzten Stunde
+sudo journalctl -u odoo --since "1 hour ago" --priority err
+```
 | `scripts/install-odoo19.sh` | Odoo 19.0 Installation | 1.2.0 |
 | `scripts/setup-cron.sh` | Cron-Jobs einrichten | 1.1.0 |
 | `scripts/setup-odoo-nginx.sh` | **Nginx Reverse Proxy + SSL/TLS Setup** | **1.2.0** |
