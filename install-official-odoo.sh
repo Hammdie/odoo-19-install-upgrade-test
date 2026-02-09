@@ -58,7 +58,7 @@ log() {
 
 # Create log directory
 create_log_dir() {
-    if [[ ! -d "$LOG_DIR" ]]; then
+    if [ ! -d "$LOG_DIR" ]; then
         mkdir -p "$LOG_DIR"
         chmod 755 "$LOG_DIR"
     fi
@@ -66,7 +66,7 @@ create_log_dir() {
 
 # Check if running as root
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
+    if [ $EUID -ne 0 ]; then
         echo -e "${RED}This script must be run as root or with sudo${NC}"
         echo -e "Please run: ${YELLOW}sudo $0${NC}"
         exit 1
@@ -122,7 +122,7 @@ install_postgresql() {
     log "INFO" "Installing PostgreSQL server..."
     
     # Check if PostgreSQL is already installed
-    if command -v psql &>/dev/null; then
+    if command -v psql >/dev/null 2>&1; then
         log "SUCCESS" "✓ PostgreSQL already installed"
         return 0
     fi
@@ -140,7 +140,7 @@ install_postgresql() {
     systemctl enable postgresql
     
     # Verify PostgreSQL is running
-    if systemctl is-active postgresql &>/dev/null; then
+    if systemctl is-active postgresql >/dev/null 2>&1; then
         log "SUCCESS" "✓ PostgreSQL service is running"
     else
         log "ERROR" "✗ PostgreSQL service failed to start"
@@ -165,7 +165,7 @@ setup_odoo_repository() {
     log "INFO" "Adding Odoo repository..."
     echo 'deb [signed-by=/usr/share/keyrings/odoo-archive-keyring.gpg] https://nightly.odoo.com/19.0/nightly/deb/ ./' > /etc/apt/sources.list.d/odoo.list
     
-    if [[ -f /etc/apt/sources.list.d/odoo.list ]]; then
+    if [ -f /etc/apt/sources.list.d/odoo.list ]; then
         log "SUCCESS" "✓ Odoo repository added"
     else
         log "ERROR" "✗ Failed to add Odoo repository"
@@ -239,7 +239,7 @@ test_installation() {
             log "INFO" "Waiting additional 30 seconds for startup..."
             sleep 30
             service_status=$(systemctl is-active odoo 2>/dev/null || echo "unknown")
-            if [[ "$service_status" == "active" ]]; then
+            if [ "$service_status" = "active" ]; then
                 log "SUCCESS" "✓ Test 2: Odoo service is now running (status: $service_status)"
             else
                 log "ERROR" "✗ Test 2: Odoo service failed to start (status: $service_status)"
@@ -259,7 +259,7 @@ test_installation() {
     local port_check_attempts=0
     local max_port_attempts=6
     
-    while [[ $port_check_attempts -lt $max_port_attempts ]]; do
+    while [ $port_check_attempts -lt $max_port_attempts ]; do
         if ss -tuln 2>/dev/null | grep -q ":8069 "; then
             log "SUCCESS" "✓ Test 3: Odoo is listening on port 8069"
             
@@ -268,8 +268,8 @@ test_installation() {
             log "INFO" "Port 8069 details: $listening_info"
             break
         else
-            ((port_check_attempts++))
-            if [[ $port_check_attempts -lt $max_port_attempts ]]; then
+            port_check_attempts=$((port_check_attempts + 1))
+            if [ $port_check_attempts -lt $max_port_attempts ]; then
                 log "WARN" "⚠ Port 8069 not yet listening (attempt $port_check_attempts/$max_port_attempts) - waiting 10 seconds..."
                 sleep 10
             else
@@ -290,7 +290,7 @@ test_installation() {
         
         # Try to get more info about the response
         local http_response=$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://localhost:8069 2>/dev/null || echo "000")
-        if [[ "$http_response" != "000" ]]; then
+        if [ "$http_response" != "000" ]; then
             log "INFO" "HTTP response code: $http_response"
         fi
     fi
@@ -328,7 +328,7 @@ show_summary() {
     echo -e "  🐘 Database: PostgreSQL"
     echo
     echo -e "${BLUE}Service Status:${NC}"
-    if [[ "$service_status" == "active" ]]; then
+    if [ "$service_status" = "active" ]; then
         echo -e "  🟢 Odoo Service: ${GREEN}Running${NC}"
     else
         echo -e "  🔴 Odoo Service: ${RED}$service_status${NC}"
@@ -336,14 +336,14 @@ show_summary() {
     echo -e "  🌐 Port 8069: $port_listening"
     echo
     
-    if [[ "$service_status" == "active" ]] && ss -tuln 2>/dev/null | grep -q ":8069 "; then
+    if [ "$service_status" = "active" ] && ss -tuln 2>/dev/null | grep -q ":8069 "; then
         echo -e "${GREEN}✅ Installation successful!${NC}"
         echo
         echo -e "${BLUE}Access your Odoo installation:${NC}"
         echo -e "  🌐 Web Interface: ${GREEN}http://localhost:8069${NC}"
         if command -v hostname &>/dev/null; then
             local hostname=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "your-server-ip")
-            if [[ -n "$hostname" && "$hostname" != "your-server-ip" ]]; then
+            if [ -n "$hostname" ] && [ "$hostname" != "your-server-ip" ]; then
                 echo -e "  🌐 External Access: ${GREEN}http://$hostname:8069${NC}"
             fi
         fi
@@ -374,14 +374,18 @@ show_summary() {
 
 # Main function
 main() {
-    # Create log directory
-    create_log_dir
+    # Create log directory first (before any logging)
+    mkdir -p "$LOG_DIR"
+    chmod 755 "$LOG_DIR"
     
     # Show banner
     show_banner
     
     # Check root
     check_root
+    
+    # Now call create_log_dir for consistency
+    create_log_dir
     
     # Set noninteractive mode globally
     export DEBIAN_FRONTEND=noninteractive
