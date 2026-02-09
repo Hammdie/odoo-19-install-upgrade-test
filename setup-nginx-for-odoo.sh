@@ -110,15 +110,15 @@ get_domain_name() {
             continue
         fi
         
-        # Basic domain validation
-        if echo "$domain_clean" | grep -qE '^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}$'; then
+        # Basic domain validation (supports subdomains)
+        if echo "$domain_clean" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'; then
             DOMAIN_NAME="$domain_clean"
             log "SUCCESS" "Domain konfiguriert: $DOMAIN_NAME"
             echo -e "${GREEN}Domain wird konfiguriert: $DOMAIN_NAME und www.$DOMAIN_NAME${NC}"
             break
         else
             echo -e "${RED}Ungültiger Domain-Name. Bitte versuchen Sie es erneut.${NC}"
-            echo -e "${BLUE}Format: domain.com (ohne http:// oder www)${NC}"
+            echo -e "${BLUE}Format: domain.com oder subdomain.domain.com (ohne http:// oder www)${NC}"
         fi
     done
     echo
