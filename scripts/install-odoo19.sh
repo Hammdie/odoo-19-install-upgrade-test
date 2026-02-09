@@ -109,6 +109,12 @@ check_prerequisites() {
         exit 1
     fi
     
+    # Early Python environment validation
+    log "INFO" "Performing early Python environment check..."
+    if ! validate_odoo_environment; then
+        log "WARN" "Python environment issues detected - will repair during installation"
+    fi
+    
     log "SUCCESS" "Prerequisites check passed"
 }
 
@@ -222,11 +228,18 @@ purge_odoo_dependencies() {
     fi
 }
 
-# Install Odoo Python dependencies
+# Install Odoo Python dependencies with enhanced error handling
 install_odoo_dependencies() {
     log "INFO" "Installing Odoo Python dependencies..."
     
+    # First validate current environment
+    if ! validate_odoo_environment; then
+        log "WARN" "Environment validation failed, repairing before installation..."
+        repair_python_environment
+    fi
+    
     # Ensure pip tooling is up to date to avoid build quirks
+    log "INFO" "Upgrading pip tools..."
     python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --upgrade pip wheel setuptools 2>&1 | tee -a "$LOG_FILE"
 
     # Install from Odoo requirements.txt
@@ -243,7 +256,10 @@ install_odoo_dependencies() {
                 local pkg=$(echo "$line" | sed 's/[<>=!].*//' | tr -d '[:space:]')
                 [[ -z "$pkg" ]] && continue
                 log "INFO" "Installing $pkg..."
-                python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$line" 2>&1 | tee -a "$LOG_FILE" || log "WARN" "Failed to install: $line"
+                if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$line" 2>&1 | tee -a "$LOG_FILE"; then
+                    log "WARN" "Failed to install: $line - attempting force reinstall"
+                    python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall --no-cache-dir "$line" 2>&1 | tee -a "$LOG_FILE" || log "ERROR" "Force reinstall also failed: $line"
+                fi
             done < "$ODOO_HOME/odoo/requirements.txt"
         fi
     else
@@ -293,17 +309,30 @@ install_odoo_dependencies() {
     )
     
     log "INFO" "Installing additional Odoo dependencies..."
+    local failed_packages=()
     for dep in "${additional_deps[@]}"; do
         if ! python3 -m pip show "$dep" &>/dev/null; then
             log "INFO" "Installing $dep..."
-            python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$dep" 2>&1 | tee -a "$LOG_FILE" || log "WARN" "Failed to install: $dep"
+            if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$dep" 2>&1 | tee -a "$LOG_FILE"; then
+                log "WARN" "Failed to install $dep - attempting force reinstall"
+                if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall --no-cache-dir "$dep" 2>&1 | tee -a "$LOG_FILE"; then
+                    log "ERROR" "Failed to install: $dep"
+                    failed_packages+=("$dep")
+                fi
+            fi
         fi
     done
+    
+    # Report failed packages
+    if [[ ${#failed_packages[@]} -gt 0 ]]; then
+        log "WARN" "Failed to install packages: ${failed_packages[*]}"
+    fi
     
     # Verify critical dependencies are installed
     local critical_deps=("passlib" "lxml" "psycopg2" "werkzeug" "Pillow" "babel" "gevent" "zope.event" "zope.interface")
     local missing_critical=()
 
+    log "INFO" "Verifying critical dependencies..."
     for dep in "${critical_deps[@]}"; do
         # Use correct import names for verification
         local import_name="${dep,,}"
@@ -324,20 +353,38 @@ install_odoo_dependencies() {
 
     if [[ ${#missing_critical[@]} -gt 0 ]]; then
         log "ERROR" "Critical dependencies missing: ${missing_critical[*]}"
-        log "ERROR" "Attempting to force install missing dependencies..."
+        log "INFO" "Attempting emergency repair of missing dependencies..."
         
-        # Try to install missing dependencies one by one
+        # Emergency repair procedure
         for missing_dep in "${missing_critical[@]}"; do
-            log "INFO" "Force installing: $missing_dep"
-            if ! python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall "$missing_dep"; then
-                log "ERROR" "Failed to install critical dependency: $missing_dep"
+            log "INFO" "Emergency install: $missing_dep"
+            
+            # Try multiple installation strategies
+            local install_successful=false
+            
+            # Strategy 1: Normal install
+            if python3 -m pip install "${PIP_INSTALL_ARGS[@]}" "$missing_dep" 2>&1 | tee -a "$LOG_FILE"; then
+                install_successful=true
+            # Strategy 2: Force reinstall
+            elif python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall "$missing_dep" 2>&1 | tee -a "$LOG_FILE"; then
+                install_successful=true
+            # Strategy 3: Install from different source for specific packages
+            elif [[ "$missing_dep" == "zope.event" || "$missing_dep" == "zope.interface" ]]; then
+                log "INFO" "Trying alternative installation for $missing_dep"
+                if python3 -m pip install "${PIP_INSTALL_ARGS[@]}" --force-reinstall --no-cache-dir --no-deps "$missing_dep" 2>&1 | tee -a "$LOG_FILE"; then
+                    install_successful=true
+                fi
+            fi
+            
+            if $install_successful; then
+                log "SUCCESS" "Emergency install successful: $missing_dep"
             else
-                log "SUCCESS" "Successfully installed: $missing_dep"
+                log "ERROR" "Emergency install failed: $missing_dep"
             fi
         done
         
-        # Re-verify after force install
-        log "INFO" "Re-verifying dependencies after force install..."
+        # Final validation after emergency repair
+        log "INFO" "Final validation after emergency repair..."
         local still_missing=()
         for dep in "${missing_critical[@]}"; do
             local import_name="${dep,,}"
@@ -354,16 +401,28 @@ install_odoo_dependencies() {
         done
         
         if [[ ${#still_missing[@]} -gt 0 ]]; then
-            log "ERROR" "Still missing after force install: ${still_missing[*]}"
-            return 1
+            log "ERROR" "CRITICAL: Still missing after emergency repair: ${still_missing[*]}"
+            log "ERROR" "This may cause Odoo startup failures"
+            
+            # Don't fail installation but warn heavily
+            echo "⚠️  WARNING: Critical dependencies missing - Odoo may not start properly"
+            echo "   Missing: ${still_missing[*]}"
+            echo "   You may need to fix this manually after installation"
         else
-            log "SUCCESS" "All critical dependencies now available"
+            log "SUCCESS" "Emergency repair successful - all critical dependencies now available"
         fi
     else
         log "SUCCESS" "All critical dependencies verified"
     fi
     
-    log "SUCCESS" "Odoo Python dependencies installed"
+    # Final environment validation
+    log "INFO" "Final Python environment validation..."
+    if validate_odoo_environment; then
+        log "SUCCESS" "Odoo Python dependencies installed and validated"
+    else
+        log "WARN" "Dependency installation completed with warnings"
+        log "WARN" "Odoo may experience startup issues"
+    fi
 }
 
 # Create Odoo configuration
@@ -921,6 +980,7 @@ main() {
     install_odoo_dependencies
     install_odoo_package
     create_odoo_config
+    test_odoo_startup
     setup_database
     setup_postgres_auth
     install_pgvector
