@@ -194,6 +194,10 @@ install_odoo() {
         return 1
     fi
     
+    # Stop Odoo service temporarily for configuration
+    log "INFO" "Stopping Odoo service for configuration..."
+    systemctl stop odoo 2>/dev/null || true
+    
     # Enable Odoo service
     log "INFO" "Enabling Odoo service..."
     if systemctl enable odoo 2>&1 | tee -a "$LOG_FILE"; then
@@ -202,8 +206,77 @@ install_odoo() {
         log "ERROR" "✗ Failed to enable Odoo service"
         return 1
     fi
+}
+
+# Setup custom Odoo configuration
+setup_odoo_configuration() {
+    log "INFO" "Setting up custom Odoo configuration..."
     
-    # Start Odoo service
+    # Determine script directory
+    local script_dir=$(dirname "$(readlink -f "$0")" 2>/dev/null) || local script_dir=$(dirname "$0")
+    local config_source="$script_dir/config/odoo.conf.example"
+    local config_target="/etc/odoo/odoo.conf"
+    
+    # Check if custom config exists
+    if [ -f "$config_source" ]; then
+        log "INFO" "Found custom configuration: $config_source"
+        
+        # Backup original config if it exists
+        if [ -f "$config_target" ]; then
+            log "INFO" "Backing up original configuration..."
+            cp "$config_target" "$config_target.backup.$(date +%Y%m%d-%H%M%S)"
+        fi
+        
+        # Copy custom configuration
+        if cp "$config_source" "$config_target" 2>&1 | tee -a "$LOG_FILE"; then
+            log "SUCCESS" "✓ Custom configuration installed"
+        else
+            log "ERROR" "✗ Failed to install custom configuration"
+            return 1
+        fi
+        
+        # Ensure proper ownership and permissions
+        chown odoo:odoo "$config_target"
+        chmod 640 "$config_target"
+        
+        # Create necessary directories from config
+        log "INFO" "Creating directories from configuration..."
+        
+        # Create log directory
+        if mkdir -p /var/log/odoo 2>&1 | tee -a "$LOG_FILE"; then
+            chown odoo:odoo /var/log/odoo
+            chmod 755 /var/log/odoo
+            log "SUCCESS" "✓ Log directory created"
+        fi
+        
+        # Create data directory
+        if mkdir -p /opt/odoo/.local/share/Odoo 2>&1 | tee -a "$LOG_FILE"; then
+            chown -R odoo:odoo /opt/odoo/.local
+            chmod 755 /opt/odoo/.local
+            log "SUCCESS" "✓ Data directory created"
+        fi
+        
+        # Create addons directories
+        for addon_dir in /opt/odoo/addons /opt/odoo/enterprise /var/odoo_addons; do
+            if [ ! -d "$addon_dir" ]; then
+                if mkdir -p "$addon_dir" 2>&1 | tee -a "$LOG_FILE"; then
+                    chown odoo:odoo "$addon_dir"
+                    chmod 755 "$addon_dir"
+                    log "SUCCESS" "✓ Created addons directory: $addon_dir"
+                fi
+            else
+                log "SUCCESS" "✓ Addons directory exists: $addon_dir"
+            fi
+        done
+        
+    else
+        log "WARN" "⚠ Custom configuration not found: $config_source"
+        log "INFO" "Using default Odoo configuration"
+    fi
+}
+
+# Start Odoo service
+start_odoo_service() {
     log "INFO" "Starting Odoo service..."
     if systemctl start odoo 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "✓ Odoo service started"
@@ -351,7 +424,14 @@ show_summary() {
         echo -e "${BLUE}Default Configuration:${NC}"
         echo -e "  📁 Config file: ${GREEN}/etc/odoo/odoo.conf${NC}"
         echo -e "  📁 Log files: ${GREEN}/var/log/odoo/${NC}"
-        echo -e "  📁 Data directory: ${GREEN}/var/lib/odoo/${NC}"
+        echo -e "  📁 Data directory: ${GREEN}/opt/odoo/.local/share/Odoo${NC}"
+        echo -e "  📁 Addons: ${GREEN}/opt/odoo/addons,/opt/odoo/enterprise,/var/odoo_addons${NC}"
+        echo
+        echo -e "${BLUE}Configuration Features:${NC}"
+        echo -e "  ⚡ Workers: ${GREEN}4 (optimized for production)${NC}"
+        echo -e "  🔒 Memory limits: ${GREEN}2.5GB hard, 2GB soft${NC}"
+        echo -e "  📊 Logging: ${GREEN}/var/log/odoo/odoo.log${NC}"
+        echo -e "  🚀 Performance tuning: ${GREEN}Enabled${NC}"
         echo
     else
         echo -e "${YELLOW}⚠️ Installation completed with issues${NC}"
@@ -423,6 +503,20 @@ main() {
         log "SUCCESS" "Odoo installation completed"
     else
         log "ERROR" "Odoo installation failed"
+        exit 1
+    fi
+    
+    if setup_odoo_configuration; then
+        log "SUCCESS" "Odoo configuration completed"
+    else
+        log "ERROR" "Odoo configuration failed"
+        exit 1
+    fi
+    
+    if start_odoo_service; then
+        log "SUCCESS" "Odoo service startup completed"
+    else
+        log "ERROR" "Odoo service startup failed"
         exit 1
     fi
     
