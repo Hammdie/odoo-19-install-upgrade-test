@@ -128,17 +128,17 @@ check_prerequisites() {
 get_github_credentials() {
     log "INFO" "GitHub-Anmeldedaten für Odoo Enterprise Repository..."
     
-    echo -e "${YELLOW}Odoo Enterprise benötigt Zugang zum privaten GitHub Repository.${NC}"
-    echo -e "${BLUE}Sie benötigen entweder:${NC}"
-    echo -e "  1. ${GREEN}GitHub Personal Access Token${NC}"
-    echo -e "  2. ${GREEN}SSH-Schlüssel für GitHub${NC}"
-    echo -e "  3. ${GREEN}Odoo Enterprise Subscription Credentials${NC}"
+    printf "\033[1;33mOdoo Enterprise benötigt Zugang zum privaten GitHub Repository.\033[0m\n"
+    printf "\033[0;34mSie benötigen entweder:\033[0m\n"
+    printf "  1. \033[0;32mGitHub Personal Access Token\033[0m\n"
+    printf "  2. \033[0;32mSSH-Schlüssel für GitHub\033[0m\n"
+    printf "  3. \033[0;32mOdoo Enterprise Subscription Credentials\033[0m\n"
     echo
     
-    echo -e "${YELLOW}Welche Authentifizierungsmethode möchten Sie verwenden?${NC}"
-    echo -e "  ${GREEN}1)${NC} Personal Access Token (empfohlen)"
-    echo -e "  ${GREEN}2)${NC} SSH-Schlüssel"
-    echo -e "  ${GREEN}3)${NC} Öffentliches Repository versuchen (kann fehlschlagen)"
+    printf "\033[1;33mWelche Authentifizierungsmethode möchten Sie verwenden?\033[0m\n"
+    printf "  \033[0;32m1)\033[0m Personal Access Token (empfohlen)\n"
+    printf "  \033[0;32m2)\033[0m SSH-Schlüssel\n"
+    printf "  \033[0;32m3)\033[0m Öffentliches Repository versuchen (kann fehlschlagen)\n"
     echo
     
     while true; do
@@ -147,9 +147,9 @@ get_github_credentials() {
         
         case $auth_choice in
             1)
-                echo -e "${YELLOW}Geben Sie Ihren GitHub Personal Access Token ein:${NC}"
-                echo -e "${BLUE}Erstellen Sie einen Token unter: https://github.com/settings/tokens${NC}"
-                echo -e "${BLUE}Benötigte Berechtigung: repo (Full control of private repositories)${NC}"
+                printf "\033[1;33mGeben Sie Ihren GitHub Personal Access Token ein:\033[0m\n"
+                printf "\033[0;34mErstellen Sie einen Token unter: https://github.com/settings/tokens\033[0m\n"
+                printf "\033[0;34mBenötigte Berechtigung: repo (Full control of private repositories)\033[0m\n"
                 echo
                 echo -n "Personal Access Token: "
                 stty -echo
@@ -158,7 +158,7 @@ get_github_credentials() {
                 echo
                 
                 if [ -z "$GITHUB_TOKEN" ]; then
-                    echo -e "${RED}Token kann nicht leer sein${NC}"
+                    printf "\033[0;31mToken kann nicht leer sein\033[0m\n"
                     continue
                 fi
                 
@@ -167,21 +167,21 @@ get_github_credentials() {
                 break
                 ;;
             2)
-                echo -e "${YELLOW}SSH-Schlüssel wird verwendet...${NC}"
-                echo -e "${BLUE}Stellen Sie sicher, dass Ihr SSH-Schlüssel zu GitHub hinzugefügt ist${NC}"
+                printf "\033[1;33mSSH-Schlüssel wird verwendet...\033[0m\n"
+                printf "\033[0;34mStellen Sie sicher, dass Ihr SSH-Schlüssel zu GitHub hinzugefügt ist\033[0m\n"
                 ENTERPRISE_REPO="git@github.com:odoo/enterprise.git"
                 log "SUCCESS" "SSH-Authentifizierung konfiguriert"
                 break
                 ;;
             3)
-                echo -e "${YELLOW}Versuche öffentliches Repository...${NC}"
-                echo -e "${RED}WARNUNG: Das kann fehlschlagen, da Enterprise privat ist${NC}"
+                printf "\033[1;33mVersuche öffentliches Repository...\033[0m\n"
+                printf "\033[0;31mWARNUNG: Das kann fehlschlagen, da Enterprise privat ist\033[0m\n"
                 ENTERPRISE_REPO="https://github.com/odoo/enterprise.git"
                 log "WARN" "Öffentliches Repository wird versucht"
                 break
                 ;;
             *)
-                echo -e "${RED}Ungültige Auswahl. Bitte wählen Sie 1, 2 oder 3.${NC}"
+                printf "\033[0;31mUngültige Auswahl. Bitte wählen Sie 1, 2 oder 3.\033[0m\n"
                 ;;
         esac
     done
@@ -444,7 +444,7 @@ main() {
     log "INFO" "Starting Odoo Enterprise 19.0 installation"
     log "INFO" "Log file: $LOG_FILE"
     
-    echo -e "${BLUE}Starting Enterprise installation...${NC}"
+    printf "\033[0;34mStarting Enterprise installation...\033[0m\n"
     echo
     
     # Installation steps
