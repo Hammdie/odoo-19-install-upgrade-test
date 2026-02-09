@@ -9,8 +9,8 @@ db_user = odoo
 db_password = odoo
 db_name = False
 
-# Addons path
-addons_path = /opt/odoo/addons,/opt/odoo/enterprise,/var/odoo_addons
+# Addons path (optimized for official Odoo package)
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/opt/odoo/addons,/opt/odoo/enterprise,/var/odoo_addons
 
 # Server settings
 xmlrpc_port = 8069
@@ -40,16 +40,8 @@ proxy_mode = True
 # Session settings
 session_timeout = 3600
 
-# Email settings (optional)
-# email_from = odoo@yourdomain.com
-# smtp_server = localhost
-# smtp_port = 587
-# smtp_user = 
-# smtp_password = 
-# smtp_ssl = False
-
-# Data directory
-data_dir = /opt/odoo/.local/share/Odoo
+# Data directory (compatible with official package)
+data_dir = /var/lib/odoo
 
 # Without demo data
 without_demo = all

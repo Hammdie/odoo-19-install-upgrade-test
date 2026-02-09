@@ -195,9 +195,8 @@ create_directories() {
     
     # Create directories one by one for shell compatibility
     create_single_directory "/var/log/odoo" "odoo" "odoo" "755"
-    create_single_directory "/opt/odoo/.local" "odoo" "odoo" "755"
-    create_single_directory "/opt/odoo/.local/share" "odoo" "odoo" "755"
-    create_single_directory "/opt/odoo/.local/share/Odoo" "odoo" "odoo" "755"
+    create_single_directory "/var/lib/odoo" "odoo" "odoo" "755"
+    create_single_directory "/opt/odoo" "odoo" "odoo" "755"
     create_single_directory "/opt/odoo/addons" "odoo" "odoo" "755"
     create_single_directory "/opt/odoo/enterprise" "odoo" "odoo" "755"
     create_single_directory "/var/odoo_addons" "odoo" "odoo" "755"
@@ -320,8 +319,8 @@ show_summary() {
     echo -e "${BLUE}Configuration Details:${NC}"
     echo -e "  📁 Config file: ${GREEN}/etc/odoo/odoo.conf${NC}"
     echo -e "  📁 Log directory: ${GREEN}/var/log/odoo/${NC}"
-    echo -e "  📁 Data directory: ${GREEN}/opt/odoo/.local/share/Odoo${NC}"
-    echo -e "  📁 Addons paths: ${GREEN}/opt/odoo/addons,/opt/odoo/enterprise,/var/odoo_addons${NC}"
+    echo -e "  📁 Data directory: ${GREEN}/var/lib/odoo${NC}"
+    echo -e "  📁 Addons paths: ${GREEN}/usr/lib/python3/dist-packages/odoo/addons,/opt/odoo/addons,/opt/odoo/enterprise,/var/odoo_addons${NC}"
     echo
     echo -e "${BLUE}Service Status:${NC}"
     if [ "$service_status" = "active" ]; then
