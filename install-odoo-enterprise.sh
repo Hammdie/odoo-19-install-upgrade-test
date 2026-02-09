@@ -307,14 +307,37 @@ validate_installation() {
     fi
     
     # Check some essential enterprise modules
-    local essential_modules=("account_accountant" "project_enterprise" "helpdesk" "planning" "documents")
-    for module in "${essential_modules[@]}"; do
-        if [ -d "$ENTERPRISE_DIR/$module" ]; then
-            log "SUCCESS" "✓ Essential module found: $module"
-        else
-            log "WARN" "⚠ Essential module missing: $module"
-        fi
-    done
+    log "INFO" "Checking essential enterprise modules..."
+    
+    if [ -d "$ENTERPRISE_DIR/account_accountant" ]; then
+        log "SUCCESS" "✓ Essential module found: account_accountant"
+    else
+        log "WARN" "⚠ Essential module missing: account_accountant"
+    fi
+    
+    if [ -d "$ENTERPRISE_DIR/project_enterprise" ]; then
+        log "SUCCESS" "✓ Essential module found: project_enterprise"
+    else
+        log "WARN" "⚠ Essential module missing: project_enterprise"
+    fi
+    
+    if [ -d "$ENTERPRISE_DIR/helpdesk" ]; then
+        log "SUCCESS" "✓ Essential module found: helpdesk"
+    else
+        log "WARN" "⚠ Essential module missing: helpdesk"
+    fi
+    
+    if [ -d "$ENTERPRISE_DIR/planning" ]; then
+        log "SUCCESS" "✓ Essential module found: planning"
+    else
+        log "WARN" "⚠ Essential module missing: planning"
+    fi
+    
+    if [ -d "$ENTERPRISE_DIR/documents" ]; then
+        log "SUCCESS" "✓ Essential module found: documents"
+    else
+        log "WARN" "⚠ Essential module missing: documents"
+    fi
     
     # Check Git repository information
     if [ -d "$ENTERPRISE_DIR/.git" ]; then
