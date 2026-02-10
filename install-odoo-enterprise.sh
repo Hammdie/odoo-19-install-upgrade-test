@@ -1,492 +1,178 @@
-#!/bin/bash
+#!/bin/sh
 
 ###############################################################################
-# Odoo Enterprise 19.0 Installation Script
-# 
-# - Installiert Odoo Enterprise 19.0 nach /opt/odoo/enterprise
-# - Umfassende Fehlerbehandlung und Logging
-# - Backup von vorhandenen Installationen
-# - Proper Git-basierte Installation
-# - Berechtigungen und Ownership konfiguration
-#
-# Usage:
-#   sudo ./install-odoo-enterprise.sh
+# Einfacher Odoo Enterprise 19.0 Installer
+# Klont einfach das Enterprise Repository nach /opt/odoo/enterprise
 ###############################################################################
 
 # Configuration
 ENTERPRISE_DIR="/opt/odoo/enterprise"
-ENTERPRISE_REPO="https://github.com/odoo/enterprise.git"
-ENTERPRISE_BRANCH="19.0"
 ODOO_USER="odoo"
-ODOO_GROUP="odoo"
-LOG_DIR="/var/log/odoo-upgrade"
-LOG_FILE="$LOG_DIR/enterprise-install-$(date +%Y%m%d-%H%M%S).log"
-BACKUP_DIR="/opt/odoo/backups"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Logging function
-log() {
-    local level=$1
-    shift
-    local message="$@"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
-    
-    case $level in
-        "ERROR")
-            printf "\033[0;31m[ERROR]\033[0m %s\n" "$message" >&2
-            ;;
-        "WARN")
-            printf "\033[1;33m[WARN]\033[0m %s\n" "$message"
-            ;;
-        "INFO")
-            printf "\033[0;34m[INFO]\033[0m %s\n" "$message"
-            ;;
-        "SUCCESS")
-            printf "\033[0;32m[SUCCESS]\033[0m %s\n" "$message"
-            ;;
-    esac
-}
+# Check root
+if [ "$(id -u)" != "0" ]; then
+    printf "${RED}Script muss als root ausgeführt werden${NC}\n"
+    printf "Ausführen: ${YELLOW}sudo $0${NC}\n"
+    exit 1
+fi
 
-# Create log directory
-create_log_dir() {
-    if [ ! -d "$LOG_DIR" ]; then
-        mkdir -p "$LOG_DIR"
-        chmod 755 "$LOG_DIR"
-    fi
-}
+printf "${BLUE}=== Odoo Enterprise 19.0 Installation ===${NC}\n"
+printf "Ziel: $ENTERPRISE_DIR\n\n"
 
-# Check if running as root
-check_root() {
-    if [ "$(id -u)" != "0" ]; then
-        printf "\033[0;31mThis script must be run as root or with sudo\033[0m\n"
-        printf "Please run: \033[1;33msudo $0\033[0m\n"
+# Check if odoo user exists
+if ! id "$ODOO_USER" >/dev/null 2>&1; then
+    printf "${RED}FEHLER: Benutzer '$ODOO_USER' existiert nicht${NC}\n"
+    printf "Bitte zuerst Odoo Community installieren\n"
+    exit 1
+fi
+
+# Install git if needed
+if ! command -v git >/dev/null 2>&1; then
+    printf "${YELLOW}Git wird installiert...${NC}\n"
+    apt update && apt install -y git
+fi
+
+# Remove existing installation
+if [ -d "$ENTERPRISE_DIR" ]; then
+    printf "${YELLOW}Vorhandene Installation wird entfernt...${NC}\n"
+    rm -rf "$ENTERPRISE_DIR"
+fi
+
+# Create parent directory
+mkdir -p "$(dirname "$ENTERPRISE_DIR")"
+
+printf "${BLUE}Wählen Sie die Authentifizierung:${NC}\n"
+printf "  1) Personal Access Token (GitHub)\n"
+printf "  2) SSH-Schlüssel\n"
+printf "  3) Öffentlich versuchen (wird wahrscheinlich fehlschlagen)\n"
+printf "Auswahl [1-3]: "
+read choice
+
+case $choice in
+    1)
+        printf "${YELLOW}GitHub Personal Access Token eingeben:${NC}\n"
+        printf "Token: "
+        stty -echo
+        read token
+        stty echo
+        printf "\n"
+        
+        if [ -z "$token" ]; then
+            printf "${RED}Token darf nicht leer sein${NC}\n"
+            exit 1
+        fi
+        
+        REPO_URL="https://$token@github.com/odoo/enterprise.git"
+        ;;
+    2)
+        printf "${YELLOW}SSH-Schlüssel wird verwendet${NC}\n"
+        REPO_URL="git@github.com:odoo/enterprise.git"
+        ;;
+    3)
+        printf "${YELLOW}Öffentliches Repository wird versucht${NC}\n"
+        REPO_URL="https://github.com/odoo/enterprise.git"
+        ;;
+    *)
+        printf "${RED}Ungültige Auswahl${NC}\n"
         exit 1
-    fi
-}
+        ;;
+esac
 
-# Display banner
-show_banner() {
-    clear
-    printf "\033[0;36m\033[1m"
-    cat << 'EOF'
-   ____      _             
-  / __ \  __| | ___   ___  
- | |  | |/ _` |/ _ \ / _ \ 
- | |__| | (_| | (_) | (_) |
-  \____/ \__,_|\___/ \___/ 
-                          
-   Enterprise 19.0        
-EOF
-    printf "\033[0m"
-    printf "\033[0;32mOdoo Enterprise 19.0 Installation\033[0m\n"
-    printf "\033[0;34mInstallation nach /opt/odoo/enterprise\033[0m\n"
-    echo
-}
+printf "${BLUE}Repository wird geklont...${NC}\n"
+printf "Von: $REPO_URL\n"
+printf "Nach: $ENTERPRISE_DIR\n\n"
 
-# Check prerequisites
-check_prerequisites() {
-    log "INFO" "Checking prerequisites..."
+# Clone repository
+if git clone --branch 19.0 --depth 1 "$REPO_URL" "$ENTERPRISE_DIR"; then
+    printf "${GREEN}✓ Repository erfolgreich geklont${NC}\n"
+else
+    printf "${RED}✗ Git clone fehlgeschlagen${NC}\n"
+    printf "\nMögliche Lösungen:\n"
+    printf "- Personal Access Token erstellen: https://github.com/settings/tokens\n"
+    printf "- SSH-Schlüssel hinzufügen: https://github.com/settings/keys\n"
+    printf "- Odoo Enterprise Zugang anfordern: sales@odoo.com\n"
+    exit 1
+fi
+
+# Check if clone was successful
+if [ ! -d "$ENTERPRISE_DIR" ]; then
+    printf "${RED}✗ Enterprise Verzeichnis wurde nicht erstellt${NC}\n"
+    exit 1
+fi
+
+# Count modules
+module_count=$(find "$ENTERPRISE_DIR" -maxdepth 2 -name "__manifest__.py" 2>/dev/null | wc -l)
+
+if [ "$module_count" -lt 10 ]; then
+    printf "${RED}✗ Repository scheint unvollständig ($module_count Module gefunden)${NC}\n"
+    rm -rf "$ENTERPRISE_DIR"
+    exit 1
+fi
+
+printf "${GREEN}✓ $module_count Enterprise Module gefunden${NC}\n"
+
+# Set permissions
+printf "${BLUE}Berechtigungen werden gesetzt...${NC}\n"
+chown -R "$ODOO_USER:$ODOO_USER" "$ENTERPRISE_DIR"
+chmod -R 755 "$ENTERPRISE_DIR"
+printf "${GREEN}✓ Berechtigungen gesetzt${NC}\n"
+
+# Update Odoo configuration
+ODOO_CONFIG="/etc/odoo/odoo.conf"
+if [ -f "$ODOO_CONFIG" ]; then
+    printf "${BLUE}Odoo-Konfiguration wird aktualisiert...${NC}\n"
     
-    # Check Git
-    if ! command -v git >/dev/null 2>&1; then
-        log "ERROR" "Git is not installed"
-        log "INFO" "Installing Git..."
-        if apt update && apt install -y git 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "✓ Git installed"
-        else
-            log "ERROR" "✗ Failed to install Git"
-            exit 1
-        fi
+    # Backup
+    cp "$ODOO_CONFIG" "$ODOO_CONFIG.backup.$(date +%Y%m%d-%H%M%S)"
+    
+    # Check if already in addons_path
+    if grep -q "addons_path.*$ENTERPRISE_DIR" "$ODOO_CONFIG"; then
+        printf "${YELLOW}Enterprise-Pfad bereits in Konfiguration${NC}\n"
     else
-        log "SUCCESS" "✓ Git is available"
-    fi
-    
-    # Check if odoo user exists
-    if ! id "$ODOO_USER" >/dev/null 2>&1; then
-        log "WARN" "⚠ Odoo user does not exist - creating it..."
-        if useradd -r -d /var/lib/odoo -s /bin/bash "$ODOO_USER" 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "✓ Odoo user created"
-        else
-            log "ERROR" "✗ Failed to create Odoo user"
-            exit 1
-        fi
-    else
-        log "SUCCESS" "✓ Odoo user exists"
-    fi
-}
-
-# Get GitHub credentials
-get_github_credentials() {
-    log "INFO" "GitHub-Anmeldedaten für Odoo Enterprise Repository..."
-    
-    printf "\033[1;33mOdoo Enterprise benötigt Zugang zum privaten GitHub Repository.\033[0m\n"
-    printf "\033[0;34mSie benötigen entweder:\033[0m\n"
-    printf "  1. \033[0;32mGitHub Personal Access Token\033[0m\n"
-    printf "  2. \033[0;32mSSH-Schlüssel für GitHub\033[0m\n"
-    printf "  3. \033[0;32mOdoo Enterprise Subscription Credentials\033[0m\n"
-    echo
-    
-    printf "\033[1;33mWelche Authentifizierungsmethode möchten Sie verwenden?\033[0m\n"
-    printf "  \033[0;32m1)\033[0m Personal Access Token (empfohlen)\n"
-    printf "  \033[0;32m2)\033[0m SSH-Schlüssel\n"
-    printf "  \033[0;32m3)\033[0m Öffentliches Repository versuchen (kann fehlschlagen)\n"
-    echo
-    
-    while true; do
-        echo -n "Auswahl (1-3): "
-        read auth_choice
+        # Get current addons_path
+        current_addons=$(grep "^addons_path" "$ODOO_CONFIG" | cut -d'=' -f2- | tr -d ' ')
         
-        case $auth_choice in
-            1)
-                printf "\033[1;33mGeben Sie Ihren GitHub Personal Access Token ein:\033[0m\n"
-                printf "\033[0;34mErstellen Sie einen Token unter: https://github.com/settings/tokens\033[0m\n"
-                printf "\033[0;34mBenötigte Berechtigung: repo (Full control of private repositories)\033[0m\n"
-                echo
-                echo -n "Personal Access Token: "
-                stty -echo
-                read GITHUB_TOKEN
-                stty echo
-                echo
-                
-                if [ -z "$GITHUB_TOKEN" ]; then
-                    printf "\033[0;31mToken kann nicht leer sein\033[0m\n"
-                    continue
-                fi
-                
-                ENTERPRISE_REPO="https://$GITHUB_TOKEN@github.com/odoo/enterprise.git"
-                log "SUCCESS" "GitHub Token konfiguriert"
-                break
-                ;;
-            2)
-                printf "\033[1;33mSSH-Schlüssel wird verwendet...\033[0m\n"
-                printf "\033[0;34mStellen Sie sicher, dass Ihr SSH-Schlüssel zu GitHub hinzugefügt ist\033[0m\n"
-                ENTERPRISE_REPO="git@github.com:odoo/enterprise.git"
-                log "SUCCESS" "SSH-Authentifizierung konfiguriert"
-                break
-                ;;
-            3)
-                printf "\033[1;33mVersuche öffentliches Repository...\033[0m\n"
-                printf "\033[0;31mWARNUNG: Das kann fehlschlagen, da Enterprise privat ist\033[0m\n"
-                ENTERPRISE_REPO="https://github.com/odoo/enterprise.git"
-                log "WARN" "Öffentliches Repository wird versucht"
-                break
-                ;;
-            *)
-                printf "\033[0;31mUngültige Auswahl. Bitte wählen Sie 1, 2 oder 3.\033[0m\n"
-                ;;
-        esac
-    done
-    echo
-}
-
-# Backup existing installation
-backup_existing_installation() {
-    if [ -d "$ENTERPRISE_DIR" ]; then
-        log "INFO" "Existing Odoo Enterprise installation found - creating backup..."
-        
-        # Create backup directory
-        mkdir -p "$BACKUP_DIR"
-        
-        local backup_name="enterprise-backup-$(date +%Y%m%d-%H%M%S)"
-        local backup_path="$BACKUP_DIR/$backup_name"
-        
-        if cp -r "$ENTERPRISE_DIR" "$backup_path" 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "✓ Backup created: $backup_path"
+        if [ -n "$current_addons" ]; then
+            # Add enterprise to the beginning
+            new_addons="$ENTERPRISE_DIR,$current_addons"
+            sed -i "s|^addons_path.*|addons_path = $new_addons|" "$ODOO_CONFIG"
+            printf "${GREEN}✓ Konfiguration aktualisiert${NC}\n"
         else
-            log "ERROR" "✗ Failed to create backup"
-            exit 1
+            printf "${YELLOW}Keine addons_path in Konfiguration gefunden${NC}\n"
         fi
-        
-        # Remove existing installation
-        log "INFO" "Removing existing installation..."
-        if rm -rf "$ENTERPRISE_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-            log "SUCCESS" "✓ Existing installation removed"
+    fi
+    
+    # Restart Odoo if running
+    if systemctl is-active odoo >/dev/null 2>&1; then
+        printf "${BLUE}Odoo wird neu gestartet...${NC}\n"
+        systemctl restart odoo
+        sleep 3
+        if systemctl is-active odoo >/dev/null 2>&1; then
+            printf "${GREEN}✓ Odoo erfolgreich neu gestartet${NC}\n"
         else
-            log "ERROR" "✗ Failed to remove existing installation"
-            exit 1
+            printf "${RED}✗ Odoo-Neustart fehlgeschlagen${NC}\n"
         fi
     else
-        log "INFO" "No existing installation found"
+        printf "${YELLOW}Odoo läuft nicht - manueller Start erforderlich${NC}\n"
     fi
-}
+else
+    printf "${YELLOW}Odoo-Konfiguration nicht gefunden: $ODOO_CONFIG${NC}\n"
+fi
 
-# Create directory structure
-create_directory_structure() {
-    log "INFO" "Creating directory structure..."
-    
-    # Create parent directories
-    local parent_dir=$(dirname "$ENTERPRISE_DIR")
-    if mkdir -p "$parent_dir" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Parent directory created: $parent_dir"
-    else
-        log "ERROR" "✗ Failed to create parent directory"
-        exit 1
-    fi
-}
-
-# Clone Enterprise repository
-clone_enterprise_repository() {
-    log "INFO" "Cloning Odoo Enterprise 19.0 repository..."
-    
-    # Clone the repository and capture the exit status
-    if git clone --branch "$ENTERPRISE_BRANCH" --depth 1 "$ENTERPRISE_REPO" "$ENTERPRISE_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-        # Additional check: verify clone actually succeeded
-        if [ -d "$ENTERPRISE_DIR/.git" ]; then
-            log "SUCCESS" "✓ Odoo Enterprise repository cloned successfully"
-        else
-            log "ERROR" "✗ Git clone command succeeded but repository directory not created"
-            return 1
-        fi
-    else
-        log "ERROR" "✗ Failed to clone Odoo Enterprise repository"
-        log "INFO" "Possible causes:"
-        log "INFO" "  - Invalid GitHub credentials"
-        log "INFO" "  - No access to Odoo Enterprise repository"
-        log "INFO" "  - Network connectivity issues"
-        log "INFO" "  - SSH key not configured or invalid"
-        log "INFO" "  - Invalid branch name"
-        return 1
-    fi
-    
-    # Verify the installation structure
-    if [ -d "$ENTERPRISE_DIR" ] && [ -f "$ENTERPRISE_DIR/__init__.py" ]; then
-        log "SUCCESS" "✓ Enterprise repository structure verified"
-        return 0
-    else
-        log "ERROR" "✗ Invalid repository structure - missing __init__.py"
-        log "INFO" "Repository may be incomplete or corrupted"
-        return 1
-    fi
-}
-
-# Set permissions and ownership
-set_permissions() {
-    log "INFO" "Setting permissions and ownership..."
-    
-    # Set ownership to odoo user
-    if chown -R "$ODOO_USER:$ODOO_GROUP" "$ENTERPRISE_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Ownership set to $ODOO_USER:$ODOO_GROUP"
-    else
-        log "ERROR" "✗ Failed to set ownership"
-        return 1
-    fi
-    
-    # Set proper permissions
-    if chmod -R 755 "$ENTERPRISE_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-        log "SUCCESS" "✓ Permissions set to 755"
-    else
-        log "ERROR" "✗ Failed to set permissions"
-        return 1
-    fi
-}
-
-# Validate installation
-validate_installation() {
-    log "INFO" "Validating Odoo Enterprise installation..."
-    
-    # Check main directory
-    if [ ! -d "$ENTERPRISE_DIR" ]; then
-        log "ERROR" "✗ Enterprise directory does not exist"
-        return 1
-    fi
-    
-    # Check for essential files
-    if [ ! -f "$ENTERPRISE_DIR/__init__.py" ]; then
-        log "ERROR" "✗ __init__.py not found"
-        return 1
-    fi
-    
-    # Count modules
-    local module_count=$(find "$ENTERPRISE_DIR" -maxdepth 2 -name "__manifest__.py" | wc -l)
-    if [ "$module_count" -lt 10 ]; then
-        log "WARN" "⚠ Only $module_count modules found (expected more)"
-    else
-        log "SUCCESS" "✓ $module_count Enterprise modules found"
-    fi
-    
-    # Check some essential enterprise modules
-    log "INFO" "Checking essential enterprise modules..."
-    
-    if [ -d "$ENTERPRISE_DIR/account_accountant" ]; then
-        log "SUCCESS" "✓ Essential module found: account_accountant"
-    else
-        log "WARN" "⚠ Essential module missing: account_accountant"
-    fi
-    
-    if [ -d "$ENTERPRISE_DIR/project_enterprise" ]; then
-        log "SUCCESS" "✓ Essential module found: project_enterprise"
-    else
-        log "WARN" "⚠ Essential module missing: project_enterprise"
-    fi
-    
-    if [ -d "$ENTERPRISE_DIR/helpdesk" ]; then
-        log "SUCCESS" "✓ Essential module found: helpdesk"
-    else
-        log "WARN" "⚠ Essential module missing: helpdesk"
-    fi
-    
-    if [ -d "$ENTERPRISE_DIR/planning" ]; then
-        log "SUCCESS" "✓ Essential module found: planning"
-    else
-        log "WARN" "⚠ Essential module missing: planning"
-    fi
-    
-    if [ -d "$ENTERPRISE_DIR/documents" ]; then
-        log "SUCCESS" "✓ Essential module found: documents"
-    else
-        log "WARN" "⚠ Essential module missing: documents"
-    fi
-    
-    # Check Git repository information
-    if [ -d "$ENTERPRISE_DIR/.git" ]; then
-        local current_branch=$(cd "$ENTERPRISE_DIR" && git branch --show-current 2>/dev/null)
-        local latest_commit=$(cd "$ENTERPRISE_DIR" && git log -1 --format="%h - %s (%ci)" 2>/dev/null)
-        log "SUCCESS" "✓ Git repository information:"
-        log "INFO" "   Branch: $current_branch"
-        log "INFO" "   Latest commit: $latest_commit"
-    fi
-    
-    log "SUCCESS" "✓ Installation validation completed"
-}
-
-# Update Odoo configuration hint
-show_configuration_hint() {
-    log "INFO" "Configuration update required..."
-    
-    echo
-    echo -e "${YELLOW}${BOLD}WICHTIG: Odoo-Konfiguration aktualisieren${NC}"
-    echo
-    echo -e "${BLUE}Um Enterprise-Module zu verwenden, fügen Sie den Pfad zur Odoo-Konfiguration hinzu:${NC}"
-    echo
-    echo -e "${GREEN}1. Bearbeiten Sie die Odoo-Konfigurationsdatei:${NC}"
-    echo -e "   ${CYAN}sudo nano /etc/odoo/odoo.conf${NC}"
-    echo
-    echo -e "${GREEN}2. Fügen Sie den Enterprise-Pfad zu addons_path hinzu:${NC}"
-    echo -e "   ${CYAN}addons_path = /usr/lib/python3/dist-packages/odoo/addons,/opt/odoo/enterprise${NC}"
-    echo
-    echo -e "${GREEN}3. Starten Sie Odoo neu:${NC}"
-    echo -e "   ${CYAN}sudo systemctl restart odoo${NC}"
-    echo
-    echo -e "${BLUE}Alternativ können Sie das setup-odoo-config.sh Script verwenden:${NC}"
-    echo -e "   ${CYAN}sudo ./setup-odoo-config.sh${NC}"
-    echo
-}
-
-# Show summary
-show_summary() {
-    echo
-    echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}  Odoo Enterprise 19.0 Installation abgeschlossen!${NC}"
-    echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo
-    echo -e "${BLUE}Installation Details:${NC}"
-    echo -e "  📁 Installationspfad: ${GREEN}$ENTERPRISE_DIR${NC}"
-    echo -e "  🔖 Version: ${GREEN}Odoo Enterprise 19.0${NC}"
-    echo -e "  👤 Besitzer: ${GREEN}$ODOO_USER:$ODOO_GROUP${NC}"
-    echo -e "  🔒 Berechtigungen: ${GREEN}755${NC}"
-    
-    if [ -d "$ENTERPRISE_DIR" ]; then
-        local module_count=$(find "$ENTERPRISE_DIR" -maxdepth 2 -name "__manifest__.py" | wc -l)
-        echo -e "  📦 Module gefunden: ${GREEN}$module_count${NC}"
-    fi
-    
-    echo
-    echo -e "${BLUE}Nächste Schritte:${NC}"
-    echo -e "  1️⃣  ${GREEN}Odoo-Konfiguration aktualisieren${NC}"
-    echo -e "  2️⃣  ${GREEN}Odoo-Service neu starten${NC}"
-    echo -e "  3️⃣  ${GREEN}Enterprise-Module in Odoo-Interface aktivieren${NC}"
-    echo
-    echo -e "${BLUE}Nützliche Befehle:${NC}"
-    echo -e "  📝 Konfiguration bearbeiten: ${GREEN}sudo nano /etc/odoo/odoo.conf${NC}"
-    echo -e "  🔄 Odoo neu starten: ${GREEN}sudo systemctl restart odoo${NC}"
-    echo -e "  📊 Odoo Status: ${GREEN}sudo systemctl status odoo${NC}"
-    echo -e "  📋 Odoo Logs: ${GREEN}sudo tail -f /var/log/odoo/odoo-server.log${NC}"
-    echo
-    echo -e "${BLUE}Enterprise Module Beispiele:${NC}"
-    echo -e "  💼 Accounting: ${GREEN}account_accountant${NC}"
-    echo -e "  🎫 Helpdesk: ${GREEN}helpdesk${NC}"
-    echo -e "  📋 Project Enterprise: ${GREEN}project_enterprise${NC}"
-    echo -e "  📅 Planning: ${GREEN}planning${NC}"
-    echo -e "  📄 Documents: ${GREEN}documents${NC}"
-    echo
-    if [ -d "$BACKUP_DIR" ] && [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
-        echo -e "${BLUE}Backup-Verzeichnis:${NC} ${GREEN}$BACKUP_DIR${NC}"
-    fi
-    echo -e "${BLUE}Log File:${NC} ${GREEN}$LOG_FILE${NC}"
-    echo
-}
-
-# Main function
-main() {
-    # Create log directory first
-    mkdir -p "$LOG_DIR" 2>/dev/null || true
-    chmod 755 "$LOG_DIR" 2>/dev/null || true
-    
-    # Show banner
-    show_banner
-    
-    # Check root
-    check_root
-    
-    # Create log directory
-    create_log_dir
-    
-    # Start logging
-    log "INFO" "Starting Odoo Enterprise 19.0 installation"
-    log "INFO" "Log file: $LOG_FILE"
-    
-    printf "\033[0;34mStarting Enterprise installation...\033[0m\n"
-    echo
-    
-    # Installation steps
-    check_prerequisites || { log "ERROR" "Prerequisites check failed"; exit 1; }
-    get_github_credentials || { log "ERROR" "GitHub credentials setup failed"; exit 1; }
-    backup_existing_installation || { log "ERROR" "Backup failed"; exit 1; }
-    create_directory_structure || { log "ERROR" "Directory creation failed"; exit 1; }
-    
-    if clone_enterprise_repository; then
-        if set_permissions; then
-            if validate_installation; then
-                show_configuration_hint
-                show_summary
-                log "SUCCESS" "Odoo Enterprise 19.0 installation completed successfully!"
-            else
-                log "ERROR" "Installation validation failed"
-                # Cleanup on validation failure
-                if [ -d "$ENTERPRISE_DIR" ]; then
-                    log "INFO" "Removing invalid installation..."
-                    rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
-                fi
-                exit 1
-            fi
-        else
-            log "ERROR" "Setting permissions failed"
-            # Cleanup on permission failure
-            if [ -d "$ENTERPRISE_DIR" ]; then
-                log "INFO" "Removing incomplete installation..."
-                rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
-            fi
-            exit 1
-        fi
-    else
-        log "ERROR" "Enterprise installation failed"
-        # Cleanup on clone failure
-        if [ -d "$ENTERPRISE_DIR" ]; then
-            log "INFO" "Removing incomplete installation..."
-            rm -rf "$ENTERPRISE_DIR" 2>/dev/null || true
-        fi
-        exit 1
-    fi
-}
-
-# Run main function
-main "$@"
+printf "\n${GREEN}=== Installation abgeschlossen! ===${NC}\n"
+printf "Enterprise-Pfad: ${GREEN}$ENTERPRISE_DIR${NC}\n"
+printf "Module gefunden: ${GREEN}$module_count${NC}\n"
+printf "\nNächste Schritte:\n"
+printf "1. Odoo in Browser öffnen\n"
+printf "2. Apps → Update Apps List\n"
+printf "3. Enterprise-Module suchen und installieren\n"
+printf "\nNützliche Befehle:\n"
+printf "  Odoo Status: ${BLUE}systemctl status odoo${NC}\n"
+printf "  Odoo Logs:   ${BLUE}journalctl -u odoo -f${NC}\n"
